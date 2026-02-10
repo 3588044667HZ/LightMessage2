@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>内网即时通讯系统</title>
+    <link rel="stylesheet" href="home.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+</head>
+<body>
+<!-- 主布局 -->
+<div class="main-layout">
+    <!-- 侧边栏 -->
+    <div class="sidebar">
+        <!-- 用户信息 -->
+        <div class="user-info">
+            <div class="user-avatar">
+                <img src="https://via.placeholder.com/40" alt="用户头像" class="avatar">
+                <span class="user-status online"></span>
+            </div>
+            <div class="user-details">
+                <div class="username">未登录用户</div>
+                <div class="user-status-text">离线</div>
+            </div>
+            <div class="user-actions">
+                <button class="icon-btn" id="userMenuBtn">
+                    <i class="fas fa-ellipsis-v"></i>
+                </button>
+                <div class="dropdown-menu" id="userMenu">
+                    <div class="dropdown-item" data-action="status">在线状态</div>
+                    <div class="dropdown-item" data-action="profile">个人资料</div>
+                    <div class="dropdown-item" data-action="settings">系统设置</div>
+                    <div class="dropdown-divider"></div>
+                    <div class="dropdown-item" data-action="logout">退出登录</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 搜索框 -->
+        <div class="search-box">
+            <i class="fas fa-search search-icon"></i>
+            <input type="text" class="search-input" id="searchInput" placeholder="搜索联系人、群组或消息">
+        </div>
+
+        <!-- 标签页 -->
+        <div class="tabs">
+            <div class="tab-nav">
+                <button class="tab-btn active" data-tab="conversations">
+                    <i class="fas fa-comment-alt"></i>
+                    <span>会话</span>
+                </button>
+                <button class="tab-btn" data-tab="friends">
+                    <i class="fas fa-user-friends"></i>
+                    <span>好友</span>
+                </button>
+                <button class="tab-btn" data-tab="groups">
+                    <i class="fas fa-users"></i>
+                    <span>群组</span>
+                </button>
+            </div>
+
+            <!-- 会话标签页内容 -->
+            <div class="tab-content active" id="conversations-tab">
+                <div class="conversations-list" id="conversationsList">
+                    <!-- 会话项将通过JS动态生成 -->
+                </div>
+            </div>
+
+            <!-- 好友标签页内容 -->
+            <div class="tab-content" id="friends-tab">
+                <div class="friends-header">
+                    <button class="btn btn-primary" id="addFriendBtn">
+                        <i class="fas fa-user-plus"></i>
+                        <span>添加好友</span>
+                    </button>
+                </div>
+                <div class="friends-list" id="friendsList">
+                    <!-- 好友项将通过JS动态生成 -->
+                </div>
+            </div>
+
+            <!-- 群组标签页内容 -->
+            <div class="tab-content" id="groups-tab">
+                <div class="groups-header">
+                    <button class="btn btn-primary" id="createGroupBtn">
+                        <i class="fas fa-plus-circle"></i>
+                        <span>创建群组</span>
+                    </button>
+                    <button class="btn btn-success" id="joinGroupBtn">
+                        <i class="fas fa-sign-in-alt"></i>
+                        <span>加入群组</span>
+                    </button>
+                </div>
+                <div class="groups-list" id="groupsList">
+                    <!-- 群组项将通过JS动态生成 -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 主内容区 -->
+    <div class="main-content">
+        <!-- 默认欢迎页面 -->
+        <div class="welcome-screen" id="welcomeScreen">
+            <div class="welcome-content">
+                <div class="welcome-icon">
+                    <i class="fas fa-comments"></i>
+                </div>
+                <h1>欢迎使用内网即时通讯系统</h1>
+                <p>选择左侧的联系人或群组开始聊天</p>
+                <div class="welcome-features">
+                    <div class="feature">
+                        <i class="fas fa-shield-alt"></i>
+                        <h3>安全加密</h3>
+                        <p>端到端加密，保护您的通信安全</p>
+                    </div>
+                    <div class="feature">
+                        <i class="fas fa-bolt"></i>
+                        <h3>高效传输</h3>
+                        <p>低延迟，消息实时送达</p>
+                    </div>
+                    <div class="feature">
+                        <i class="fas fa-users"></i>
+                        <h3>团队协作</h3>
+                        <p>支持群组聊天，提升团队效率</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 聊天窗口（默认隐藏） -->
+        <div class="chat-window" id="chatWindow">
+            <!-- 聊天头部 -->
+            <div class="chat-header">
+                <div class="chat-info">
+                    <div class="chat-avatar">
+                        <img src="https://via.placeholder.com/40" alt="聊天对象头像" class="avatar">
+                    </div>
+                    <div class="chat-details">
+                        <div class="chat-name" id="chatName">未选择</div>
+                        <div class="chat-status" id="chatStatus"></div>
+                    </div>
+                </div>
+                <div class="chat-actions">
+                    <button class="icon-btn" id="voiceCallBtn">
+                        <i class="fas fa-phone"></i>
+                    </button>
+                    <button class="icon-btn" id="videoCallBtn">
+                        <i class="fas fa-video"></i>
+                    </button>
+                    <button class="icon-btn" id="chatMenuBtn">
+                        <i class="fas fa-ellipsis-v"></i>
+                    </button>
+                    <div class="dropdown-menu" id="chatMenu">
+                        <div class="dropdown-item" data-action="viewProfile">查看资料</div>
+                        <div class="dropdown-item" data-action="searchHistory">查找聊天记录</div>
+                        <div class="dropdown-item" data-action="clearHistory">清空聊天记录</div>
+                        <div class="dropdown-item group-only" data-action="groupInfo">群组信息</div>
+                        <div class="dropdown-item group-only" data-action="inviteMember">邀请成员</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 消息区域 -->
+            <div class="messages-container" id="messagesContainer">
+                <div class="messages-list" id="messagesList">
+                    <!-- 消息将通过JS动态生成 -->
+                </div>
+            </div>
+
+            <!-- 输入区域 -->
+            <div class="input-area">
+                <div class="input-tools">
+                    <button class="icon-btn" id="imageBtn">
+                        <i class="fas fa-image"></i>
+                    </button>
+                    <button class="icon-btn" id="fileBtn">
+                        <i class="fas fa-folder"></i>
+                    </button>
+                    <button class="icon-btn" id="voiceBtn">
+                        <i class="fas fa-microphone"></i>
+                    </button>
+                </div>
+                <div class="message-input-container">
+                        <textarea
+                                class="message-input"
+                                id="messageInput"
+                                placeholder="输入消息..."
+                                rows="3"
+                        ></textarea>
+                    <div class="input-actions">
+                        <button class="icon-btn" id="emojiBtn">
+                            <i class="far fa-smile"></i>
+                        </button>
+                        <button class="btn btn-primary" id="sendBtn">
+                            <i class="fas fa-paper-plane"></i>
+                            <span>发送</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 模态框容器 -->
+<div class="modal-overlay" id="modalOverlay">
+    <div class="modal" id="modal">
+        <div class="modal-header">
+            <h3 class="modal-title" id="modalTitle">模态框标题</h3>
+            <button class="icon-btn close-btn" id="closeModalBtn">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="modal-body" id="modalBody">
+            <!-- 模态框内容将通过JS动态生成 -->
+        </div>
+        <div class="modal-footer" id="modalFooter">
+            <!-- 模态框按钮将通过JS动态生成 -->
+        </div>
+    </div>
+</div>
+
+<!-- 消息提示容器 -->
+<div class="toast-container" id="toastContainer"></div>
+<script>
+    const {ipcRenderer} = require('electron');
+</script>
+<!-- 脚本 -->
+<script src="home.js" type="module"></script>
+</body>
+</html>
