@@ -30,6 +30,7 @@ const createWindow = () => {
         if (data.code === 200) {
             console.log("登录成功")
             Client.token = data.token;
+            Client.userId = data.user_id;
             if (db.getUser(Number(data.user_id))) {
                 db.updateUser(Number(data.user_id), data);
             } else {
@@ -38,21 +39,23 @@ const createWindow = () => {
             win.webContents.send("login:success")
             // db.setSetting('serverUrl',);
             setTimeout(() => {
+                // win.hide()
                 win.close()
 
             }, 100)
             const main = new BrowserWindow({
-                webPreferences: {contextIsolation: false, nodeIntegration: true}
+                webPreferences: {contextIsolation: false, nodeIntegration: true, webSecurity: false}
             })
-            main.loadFile(path.join(__dirname, './home/home.html')).then(r => {
+            main.loadFile(path.join(__dirname, '/home/Home.html')).then(r => {
                 console.log("home.html加载完毕", r);
+                win.close();
 
             })
             ipcMain.on("home:LoadUserData", (event) => {
                 console.log("home:LoadUserData");
                 // let user_data = db.getUser(Number(data.user_id))
                 main.webContents.send("home:LoadUserDataRes", {
-                    id: data.user_id,
+                    id: Client.userId,
                     username: data.username,
                     avatar: data.user_info.avatar,
                     status: data.user_info.status
@@ -163,6 +166,12 @@ const createWindow = () => {
             })
             ipcMain.on("home:sendMessage", (event, data) => {
                 if (data.type === "group") {
+                    Client.sendMessage("/group/message/send", {
+                        group_id: data.targetId, content: {"text": data.content}, client_msg_id: data.id
+                    }).then(r => {
+                        console.log("发送群消息：", data)
+                    })
+
 
                 } else {
                     Client.sendTextMessage(data.targetId, data.content, data.id);
@@ -173,9 +182,44 @@ const createWindow = () => {
                 }
             })
             Client.on("/message/receive", (data) => {
+                data.target_type = "user";
                 main.webContents.send("home:MessageReceive", data)
                 console.log("/message/receive", data)
+                // 将消息保存到数据库
+                if (data.target_type === 'user') {
+                    // 私聊消息
+                    db.saveMessage({
+                        message_id: data.message_id,
+                        sender_id: data.sender_id,
+                        receiver_id: data.target_id,
+                        content: data.content,
+                        timestamp: data.timestamp,
+                        type: 'text'
+                    });
+                } else if (data.target_type === 'group') {
+                    // 群聊消息
+                    db.saveGroupMessage({
+                        message_id: data.message_id,
+                        group_id: data.target_id,
+                        sender_id: data.sender_id,
+                        content: data.content,
+                        timestamp: data.timestamp,
+                        type: 'text'
+                    });
+                }
                 //     todo 实现消息接收
+            })
+            Client.on("/group/message/receive", (data) => {
+                data.target_type = "group";
+                db.saveGroupMessage({
+                    message_id: data.message_id,
+                    group_id: data.target_id,
+                    sender_id: data.sender_id,
+                    content: data.content,
+                    timestamp: data.timestamp,
+                    type: 'text'
+                });
+                main.webContents.send("home:MessageReceive", data)
             })
 
         } else {

@@ -118,7 +118,181 @@ class HomeApp {
                 this.hideAllDropdowns();
             }
         });
+        // 监听服务器推送的消息
+        ipcRenderer.on("home:MessageReceive", (event, data) => {
+            this.handleReceivedMessage(data);
+        });
     }
+
+    // 添加处理接收消息的方法
+    handleReceivedMessage(messageData) {
+        console.log("收到新消息:", messageData);
+
+        // 根据消息类型（私聊/群聊）确定目标ID
+        let targetId, type;
+
+        if (messageData.target_type === 'user') {
+            // 私聊消息
+            targetId = messageData.sender_id === this.state.currentUser.id ? messageData.target_id : messageData.sender_id;
+            type = 'friend';
+        } else if (messageData.target_type === 'group') {
+            // 群聊消息
+            targetId = messageData.group_id;
+            type = 'group';
+        } else {
+            console.warn("未知的消息类型:", messageData.target_type);
+            return;
+        }
+
+        // 创建消息对象
+        const message = {
+            id: messageData.message_id || Date.now(),
+            sender: messageData.sender_id,
+            content: messageData.content,
+            time: new Date(messageData.timestamp || Date.now()),
+            type: 'text'
+        };
+
+        // 更新会话列表
+        this.updateConversationWithMessage(targetId, type, message);
+
+        // 如果当前正在与消息发送方/群组聊天，则显示消息
+        if (this.state.currentChat && ((type === 'friend' && this.state.currentChat.id === targetId) || (type === 'group' && this.state.currentChat.id === targetId))) {
+            this.appendMessageToChat(message);
+        }
+    }
+
+    // 添加创建新会话的方法
+    createNewConversation(targetId, type, message) {
+        let conversation = {
+            id: Date.now(), // 临时ID，后续可以从服务器获取
+            type: type,
+            lastMessage: message.content.text || message.content,
+            unread: 1,
+            time: this.formatRelativeTime(message.time),
+            lastMessageTime: message.time,
+            targetId: targetId
+        };
+
+        // 根据类型设置会话名称和头像
+        if (type === 'friend') {
+            const friend = this.cache.friends[targetId];
+            if (friend) {
+                conversation.name = friend.nickname;
+                conversation.avatar = friend.avatar;
+            } else {
+                // 如果好友信息不在缓存中，显示默认信息
+                conversation.name = `用户${targetId}`;
+                conversation.avatar = 'https://via.placeholder.com/48';
+            }
+        } else if (type === 'group') {
+            const group = this.cache.groups[targetId];
+            if (group) {
+                conversation.name = group.name;
+                conversation.avatar = group.avatar;
+            } else {
+                conversation.name = `群组${targetId}`;
+                conversation.avatar = 'https://via.placeholder.com/48';
+                //     todo 头像
+            }
+        }
+
+        return conversation;
+    }
+
+    // 添加将消息追加到聊天窗口的方法
+    appendMessageToChat(message) {
+        const messagesList = document.getElementById('messagesList');
+        const isSent = message.sender === this.state.currentUser.id;
+        const senderName = isSent ? '我' : this.getSenderName(message.sender, this.state.currentChat.type);
+        const type = this.state.currentChat.type;
+
+        const messageEl = document.createElement('div');
+        messageEl.className = `message-item ${isSent ? 'sent' : 'received'}`;
+        messageEl.innerHTML = `
+        <div class="message-content">
+            ${type === 'group' && !isSent ? `<div class="message-sender">${senderName}</div>` : ''}
+            <div class="message-text">${message.content.text || message.content}</div>
+            <div class="message-time">${this.formatTime(message.time)}</div>
+        </div>
+    `;
+
+        messagesList.appendChild(messageEl);
+
+        // 滚动到底部
+        setTimeout(() => {
+            const container = document.getElementById('messagesContainer');
+            container.scrollTop = container.scrollHeight;
+        }, 100);
+    }
+
+// 添加格式化相对时间的方法（用于会话列表显示）
+    formatRelativeTime(date) {
+        const now = new Date();
+        const diff = now - date;
+        const oneDay = 24 * 60 * 60 * 1000;
+        const oneWeek = 7 * oneDay;
+
+        if (diff < oneDay) {
+            // 今天
+            return date.toLocaleTimeString('zh-CN', {
+                hour: '2-digit', minute: '2-digit'
+            });
+        } else if (diff < 2 * oneDay) {
+            // 昨天
+            return '昨天';
+        } else if (diff < 7 * oneDay) {
+            // 一周内
+            const days = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+            return days[date.getDay()];
+        } else {
+            // 更早
+            return `${date.getMonth() + 1}-${date.getDate()}`;
+        }
+    }
+
+    // 修改getSenderName方法，添加对群聊消息发送者的处理
+    getSenderName(senderId, type) {
+        if (senderId === this.state.currentUser.id) return '我';
+
+        if (type === 'friend') {
+            const friend = this.cache.friends[senderId];
+            return friend ? friend.nickname : `用户${senderId}`;
+        } else {
+            // 群聊中，先从好友缓存中查找
+            const friend = this.cache.friends[senderId];
+            return friend ? friend.nickname : `用户${senderId}`;
+        }
+    }
+
+    // 添加更新会话列表的方法
+    updateConversationWithMessage(targetId, type, message) {
+        // 查找是否已有该会话
+        let conversation = this.state.conversations.find(conv => conv.targetId === targetId && conv.type === type);
+
+        if (conversation) {
+            // 更新现有会话
+            conversation.lastMessage = message.content.text || message.content;
+            conversation.lastMessageTime = message.time;
+            conversation.time = this.formatRelativeTime(message.time);
+
+            // 如果当前没有打开这个会话，增加未读计数
+            if (!this.state.currentChat || this.state.currentChat.id !== targetId || this.state.currentChat.type !== type) {
+                conversation.unread = (conversation.unread || 0) + 1;
+            }
+        } else {
+            // 创建新会话
+            conversation = this.createNewConversation(targetId, type, message);
+            this.state.conversations.unshift(conversation); // 添加到列表开头
+        }
+
+        // 重新排序会话列表（按最后消息时间倒序）
+        this.state.conversations.sort((a, b) => b.lastMessageTime - a.lastMessageTime);
+
+        // 更新UI
+        this.updateConversationsList();
+    }
+
 
     // 加载模拟数据
     loadMockData() {
@@ -166,11 +340,13 @@ class HomeApp {
 
         })
         ipcRenderer.on("home:LoadUserDataRes", (event, data) => {
+            // console.log("home:LoadUserDataRes", data)
             // 设置当前用户
             this.state.currentUser = {
-                id: data.user_id, name: data.username, avatar: data.avatar, status: data.status
+                id: data.id, name: data.username, avatar: data.avatar, status: data.status
             };
             this.updateUserInfo()
+            // console.log(this.state.currentUser)
 
         })
         ipcRenderer.on("home:LoadGroupsRes", (event, data) => {
@@ -358,7 +534,7 @@ class HomeApp {
         // 绑定点击事件
         container.querySelectorAll('.group-item').forEach(item => {
             item.addEventListener('click', (e) => {
-                const id = parseInt(e.currentTarget.dataset.id);
+                const id = e.currentTarget.dataset.id;
                 this.selectGroup(id);
             });
         });
@@ -402,8 +578,11 @@ class HomeApp {
         const messagesList = document.getElementById('messagesList');
         ipcRenderer.on("home:LoadChatHistoryRes", (event, data) => {
             messagesList.innerHTML = data.map(msg => {
-                const isSent = msg.sender === this.state.currentUser.id;
-                const senderName = isSent ? '我' : this.getSenderName(msg.sender, type);
+                const isSent = msg.sender_id === this.state.currentUser.id;
+                console.log(msg)
+                console.log(this.state.currentUser.id);
+                const senderName = isSent ? '我' : this.getSenderName(msg.sender_id, type);
+                // this.cache.friends[]
 
                 return `
                 <div class="message-item ${isSent ? 'sent' : 'received'}">
@@ -617,11 +796,11 @@ class HomeApp {
         });
 
         // 模拟对方回复（仅演示用）
-        if (this.state.currentChat.type === 'friend') {
-            setTimeout(() => {
-                this.simulateReply();
-            }, 1000);
-        }
+        // if (this.state.currentChat.type === 'friend') {
+        //         //     setTimeout(() => {
+        //         //         this.simulateReply();
+        //         //     }, 1000);
+        //         // }
     }
 
     // 模拟回复
@@ -1191,17 +1370,23 @@ class HomeApp {
         return statusMap[status] || '未知';
     }
 
-    getSenderName(senderId, type) {
-        if (senderId === this.state.currentUser.id) return '我';
-
-        if (type === 'friend') {
-            const friend = this.cache.friends[senderId];
-            return friend ? friend.nickname : `用户${senderId}`;
-        } else {
-            // 群聊中，可以缓存群成员信息
-            return `用户${senderId}`;
-        }
+    // 添加处理消息发送成功回调的方法
+    handleMessageSent(message) {
+        console.log("消息发送成功:", message);
+        // 可以在这里更新消息状态（如将消息标记为已发送）
     }
+
+    // getSenderName(senderId, type) {
+    //     if (senderId === this.state.currentUser.id) return '我';
+    //
+    //     if (type === 'friend') {
+    //         const friend = this.cache.friends[senderId];
+    //         return friend ? friend.nickname : `用户${senderId}`;
+    //     } else {
+    //         // 群聊中，可以缓存群成员信息
+    //         return `用户${senderId}`;
+    //     }
+    // }
 
     formatTime(time) {
         if (!time) return '';

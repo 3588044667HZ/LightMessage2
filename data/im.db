@@ -8,10 +8,10 @@
           "key": "autoLogin",
           "value": false,
           "meta": {
-            "revision": 42,
+            "revision": 75,
             "created": 1770688032449,
             "version": 0,
-            "updated": 1770732387495
+            "updated": 1770816828888
           },
           "$loki": 1
         },
@@ -27,7 +27,7 @@
         },
         {
           "key": "serverUrl",
-          "value": "ws://localhost:8765",
+          "value": "ws://182.92.128.249:8765",
           "meta": {
             "revision": 0,
             "created": 1770688032450,
@@ -161,20 +161,20 @@
           "user_id": 2,
           "username": "zls",
           "nickname": "ZLS",
-          "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoyLCJ1c2VybmFtZSI6InpscyIsImV4cCI6MTc3MDgxODc4NywiaWF0IjoxNzcwNzMyMzg3LCJqdGkiOiJKRExHcG1aSkxiUGM2WElkenB6MW53In0.aG1ofV2XqYL94iZJUCJAhfb8FhEmvWrDZC83YFCDQmY",
+          "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoyLCJ1c2VybmFtZSI6InpscyIsImV4cCI6MTc3MDkwMzIyOSwiaWF0IjoxNzcwODE2ODI5LCJqdGkiOiJTNVVmdVcwOE9YWHpobXVPMzhveTdBIn0.lwgI1nUWvxrpo02hqaCWsyQ_n7qk0daJrS2Uh9Aq02M",
           "expires_in": 86400,
           "user_info": {
-            "avatar": "http://127.0.0.1:8080/avatar/2",
+            "avatar": "http://182.92.128.249:8766/avatar/2",
             "department": "设计部",
             "status": "online",
-            "last_seen": 1770732387
+            "last_seen": 1770816829
           },
           "code": 200,
           "meta": {
-            "revision": 39,
+            "revision": 69,
             "created": 1770695170618,
             "version": 0,
-            "updated": 1770732387502
+            "updated": 1770816828940
           },
           "$loki": 1
         }
@@ -235,33 +235,438 @@
     },
     {
       "name": "messages",
-      "data": [],
+      "data": [
+        {
+          "message_id": "4272b0e5-325c-4c6a-aab6-ef389e5247e3",
+          "sender_id": 1,
+          "content": {
+            "text": "1"
+          },
+          "timestamp": 1770775659,
+          "type": "text",
+          "conversation_id": "conv_1_undefined",
+          "meta": {
+            "revision": 0,
+            "created": 1770775659759,
+            "version": 0
+          },
+          "$loki": 1
+        },
+        {
+          "message_id": "79d2c285-132b-4ce5-a2bb-0a1c8eb56152",
+          "sender_id": 1,
+          "content": {
+            "text": "1"
+          },
+          "timestamp": 1770776204,
+          "type": "text",
+          "conversation_id": "conv_1_undefined",
+          "meta": {
+            "revision": 0,
+            "created": 1770776204902,
+            "version": 0
+          },
+          "$loki": 2
+        },
+        {
+          "message_id": "c3eee531-16a3-4bca-a723-34819bba3d9f",
+          "sender_id": 1,
+          "content": {
+            "text": "11111"
+          },
+          "timestamp": 1770776209,
+          "type": "text",
+          "conversation_id": "conv_1_undefined",
+          "meta": {
+            "revision": 0,
+            "created": 1770776209311,
+            "version": 0
+          },
+          "$loki": 3
+        },
+        {
+          "message_id": "db8eaa92-fcc4-4581-a2cc-542e90c6c294",
+          "sender_id": 1,
+          "content": {
+            "text": "11111"
+          },
+          "timestamp": 1770776213,
+          "type": "text",
+          "conversation_id": "conv_1_undefined",
+          "meta": {
+            "revision": 0,
+            "created": 1770776213674,
+            "version": 0
+          },
+          "$loki": 4
+        },
+        {
+          "message_id": "60500d8b-2cf5-47ad-bade-c03b5a599d41",
+          "sender_id": 1,
+          "content": {
+            "text": "我套"
+          },
+          "timestamp": 1770776221,
+          "type": "text",
+          "conversation_id": "conv_1_undefined",
+          "meta": {
+            "revision": 0,
+            "created": 1770776221971,
+            "version": 0
+          },
+          "$loki": 5
+        },
+        {
+          "message_id": "5671b5ea-ff27-4197-aeba-dfee3f809e44",
+          "sender_id": 1,
+          "content": {
+            "text": "我是LWR"
+          },
+          "timestamp": 1770791496,
+          "type": "text",
+          "conversation_id": "conv_1_undefined",
+          "meta": {
+            "revision": 0,
+            "created": 1770791495626,
+            "version": 0
+          },
+          "$loki": 6
+        },
+        {
+          "message_id": "e8c692cb-fcb2-4430-b18b-a71e1a44e6a9",
+          "sender_id": 1,
+          "content": {
+            "text": "我喜欢mm"
+          },
+          "timestamp": 1770816957,
+          "type": "text",
+          "conversation_id": "conv_1_undefined",
+          "meta": {
+            "revision": 0,
+            "created": 1770816957819,
+            "version": 0
+          },
+          "$loki": 7
+        },
+        {
+          "message_id": "086a5d51-2fc4-4f74-8804-edc1dc78def9",
+          "sender_id": 1,
+          "content": {
+            "text": "我喜欢tchi腰子"
+          },
+          "timestamp": 1770816978,
+          "type": "text",
+          "conversation_id": "conv_1_undefined",
+          "meta": {
+            "revision": 0,
+            "created": 1770816978485,
+            "version": 0
+          },
+          "$loki": 8
+        },
+        {
+          "message_id": "b32cd0ce-9aef-4122-ae2c-3310d3539677",
+          "sender_id": 1,
+          "content": {
+            "text": "我喜欢lerlerlerlerlerlerlerleriiiii!"
+          },
+          "timestamp": 1770816997,
+          "type": "text",
+          "conversation_id": "conv_1_undefined",
+          "meta": {
+            "revision": 0,
+            "created": 1770816997255,
+            "version": 0
+          },
+          "$loki": 9
+        },
+        {
+          "message_id": "3eca4414-7260-4249-9532-6409624edad4",
+          "sender_id": 1,
+          "content": {
+            "text": "我是300斤"
+          },
+          "timestamp": 1770817016,
+          "type": "text",
+          "conversation_id": "conv_1_undefined",
+          "meta": {
+            "revision": 0,
+            "created": 1770817015901,
+            "version": 0
+          },
+          "$loki": 10
+        },
+        {
+          "message_id": "27b6e67c-0679-43d3-8768-b24079f2d80d",
+          "sender_id": 1,
+          "content": {
+            "text": "我喜欢吃赵连山"
+          },
+          "timestamp": 1770817028,
+          "type": "text",
+          "conversation_id": "conv_1_undefined",
+          "meta": {
+            "revision": 0,
+            "created": 1770817028207,
+            "version": 0
+          },
+          "$loki": 11
+        },
+        {
+          "message_id": "46c25f15-6472-4e80-8622-5202d4e3dcec",
+          "sender_id": 1,
+          "content": {
+            "text": "tsiaa!"
+          },
+          "timestamp": 1770817035,
+          "type": "text",
+          "conversation_id": "conv_1_undefined",
+          "meta": {
+            "revision": 0,
+            "created": 1770817034914,
+            "version": 0
+          },
+          "$loki": 12
+        },
+        {
+          "message_id": "1e871e4b-9ead-44ea-a3e3-ee5ab0571115",
+          "sender_id": 1,
+          "content": {
+            "text": "我喜欢熬哥油"
+          },
+          "timestamp": 1770817060,
+          "type": "text",
+          "conversation_id": "conv_1_undefined",
+          "meta": {
+            "revision": 0,
+            "created": 1770817060337,
+            "version": 0
+          },
+          "$loki": 13
+        },
+        {
+          "message_id": "c40cc9e7-313b-4bc2-b70a-9512ef3a0440",
+          "sender_id": 1,
+          "content": {
+            "text": "( )=>{ }"
+          },
+          "timestamp": 1770817119,
+          "type": "text",
+          "conversation_id": "conv_1_undefined",
+          "meta": {
+            "revision": 0,
+            "created": 1770817119709,
+            "version": 0
+          },
+          "$loki": 14
+        },
+        {
+          "message_id": "d6a8e958-e753-4842-a93f-71ef825e0d7b",
+          "sender_id": 1,
+          "content": {
+            "text": "《mull》"
+          },
+          "timestamp": 1770817139,
+          "type": "text",
+          "conversation_id": "conv_1_undefined",
+          "meta": {
+            "revision": 0,
+            "created": 1770817139441,
+            "version": 0
+          },
+          "$loki": 15
+        },
+        {
+          "message_id": "9fe781e1-9fe5-4ae3-8b16-8baab97a9a66",
+          "sender_id": 1,
+          "content": {
+            "text": "《mer》"
+          },
+          "timestamp": 1770817142,
+          "type": "text",
+          "conversation_id": "conv_1_undefined",
+          "meta": {
+            "revision": 0,
+            "created": 1770817142625,
+            "version": 0
+          },
+          "$loki": 16
+        },
+        {
+          "message_id": "d1144758-bc44-45f8-848c-ebfd202bf905",
+          "sender_id": 1,
+          "content": {
+            "text": "17"
+          },
+          "timestamp": 1770817145,
+          "type": "text",
+          "conversation_id": "conv_1_undefined",
+          "meta": {
+            "revision": 0,
+            "created": 1770817145301,
+            "version": 0
+          },
+          "$loki": 17
+        },
+        {
+          "message_id": "e5ad93b5-f201-47de-ac4c-31bf80cce4c7",
+          "sender_id": 1,
+          "content": {
+            "text": "喝水"
+          },
+          "timestamp": 1770817186,
+          "type": "text",
+          "conversation_id": "conv_1_undefined",
+          "meta": {
+            "revision": 0,
+            "created": 1770817186655,
+            "version": 0
+          },
+          "$loki": 18
+        },
+        {
+          "message_id": "3baf6965-b963-4827-be79-372fd8597503",
+          "sender_id": 1,
+          "content": {
+            "text": "排水给一汽法"
+          },
+          "timestamp": 1770817209,
+          "type": "text",
+          "conversation_id": "conv_1_undefined",
+          "meta": {
+            "revision": 0,
+            "created": 1770817209037,
+            "version": 0
+          },
+          "$loki": 19
+        }
+      ],
       "idIndex": null,
       "binaryIndices": {
         "id": {
           "name": "id",
           "dirty": false,
-          "values": []
+          "values": [
+            18,
+            17,
+            16,
+            15,
+            14,
+            13,
+            12,
+            11,
+            10,
+            9,
+            8,
+            7,
+            6,
+            5,
+            4,
+            3,
+            2,
+            1,
+            0
+          ]
         },
         "sender_id": {
           "name": "sender_id",
           "dirty": false,
-          "values": []
+          "values": [
+            18,
+            17,
+            16,
+            15,
+            14,
+            13,
+            12,
+            11,
+            10,
+            9,
+            8,
+            7,
+            6,
+            5,
+            4,
+            3,
+            2,
+            1,
+            0
+          ]
         },
         "receiver_id": {
           "name": "receiver_id",
           "dirty": false,
-          "values": []
+          "values": [
+            18,
+            17,
+            16,
+            15,
+            14,
+            13,
+            12,
+            11,
+            10,
+            9,
+            8,
+            7,
+            6,
+            5,
+            4,
+            3,
+            2,
+            1,
+            0
+          ]
         },
         "timestamp": {
           "name": "timestamp",
           "dirty": false,
-          "values": []
+          "values": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18
+          ]
         },
         "conversation_id": {
           "name": "conversation_id",
           "dirty": false,
-          "values": []
+          "values": [
+            18,
+            17,
+            16,
+            15,
+            14,
+            13,
+            12,
+            11,
+            10,
+            9,
+            8,
+            7,
+            6,
+            5,
+            4,
+            3,
+            2,
+            1,
+            0
+          ]
         }
       },
       "constraints": null,
@@ -284,7 +689,7 @@
       "serializableIndices": true,
       "disableFreeze": true,
       "ttl": null,
-      "maxId": 0,
+      "maxId": 19,
       "DynamicViews": [],
       "events": {
         "insert": [],
@@ -306,28 +711,90 @@
     },
     {
       "name": "group_messages",
-      "data": [],
+      "data": [
+        {
+          "message_id": "ce461345-634e-49f9-a11b-65c3578bdd7c",
+          "sender_id": 2,
+          "content": {
+            "text": "11111"
+          },
+          "timestamp": 1770779021,
+          "type": "text",
+          "meta": {
+            "revision": 0,
+            "created": 1770779021416,
+            "version": 0
+          },
+          "$loki": 1
+        },
+        {
+          "message_id": "7155ff72-382e-4761-ae52-1e5a416dd7a7",
+          "sender_id": 2,
+          "content": {
+            "text": "1"
+          },
+          "timestamp": 1770779211,
+          "type": "text",
+          "meta": {
+            "revision": 0,
+            "created": 1770779211047,
+            "version": 0
+          },
+          "$loki": 2
+        },
+        {
+          "message_id": "82f64291-6a8d-4098-b3a3-59faba6cd662",
+          "sender_id": 2,
+          "content": {
+            "text": "514"
+          },
+          "timestamp": 1770779224,
+          "type": "text",
+          "meta": {
+            "revision": 0,
+            "created": 1770779224006,
+            "version": 0
+          },
+          "$loki": 3
+        }
+      ],
       "idIndex": null,
       "binaryIndices": {
         "id": {
           "name": "id",
           "dirty": false,
-          "values": []
+          "values": [
+            2,
+            1,
+            0
+          ]
         },
         "group_id": {
           "name": "group_id",
           "dirty": false,
-          "values": []
+          "values": [
+            2,
+            1,
+            0
+          ]
         },
         "sender_id": {
           "name": "sender_id",
           "dirty": false,
-          "values": []
+          "values": [
+            2,
+            1,
+            0
+          ]
         },
         "timestamp": {
           "name": "timestamp",
           "dirty": false,
-          "values": []
+          "values": [
+            0,
+            1,
+            2
+          ]
         }
       },
       "constraints": null,
@@ -350,7 +817,7 @@
       "serializableIndices": true,
       "disableFreeze": true,
       "ttl": null,
-      "maxId": 0,
+      "maxId": 3,
       "DynamicViews": [],
       "events": {
         "insert": [],
@@ -627,7 +1094,7 @@
     "recursiveWait": true,
     "recursiveWaitLimit": false,
     "recursiveWaitLimitDuration": 2000,
-    "started": 1770732373561
+    "started": 1770816816726
   },
   "persistenceMethod": "fs",
   "persistenceAdapter": null,

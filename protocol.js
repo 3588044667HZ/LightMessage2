@@ -1,6 +1,6 @@
 // 简单的JavaScript客户端示例
 class IMClient {
-    constructor(serverUrl = "ws://localhost:8765") {
+    constructor(serverUrl = "ws://182.92.128.249:8765") {
         this.ws = null;
         this.serverUrl = serverUrl;
         this.connected = false;
