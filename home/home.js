@@ -15,8 +15,14 @@ class HomeApp {
 
         // 缓存数据
         this.cache = {
-            friends: {}, groups: {}
+            friends: {}, groups: {},
+            // 消息缓存: { "friend_101": { messages: [...], lastMessageId: "xxx" }, "group_g1": {...} }
+            chatHistory: {}
         };
+
+        // 同步定时器（每 5 分钟从服务器拉取最新消息）
+        this.syncTimer = null;
+        this.SYNC_INTERVAL = 5 * 60 * 1000; // 5 分钟
 
         // 初始化
         this.init();
@@ -25,10 +31,107 @@ class HomeApp {
     // 初始化应用
     init() {
         this.bindEvents();
-        this.loadMockData();
         this.updateUI();
         this.showToast('欢迎使用内网即时通讯系统', 'info');
         ipcRenderer.send("home:LoadUserData")
+    }
+
+    // 生成消息缓存 key
+    _chatKey(type, targetId) {
+        return `${type}_${String(targetId)}`;
+    }
+
+    // 获取缓存中的消息
+    _getCachedMessages(type, targetId) {
+        const cache = this.cache.chatHistory[this._chatKey(type, targetId)];
+        return cache ? cache.messages : null;
+    }
+
+    // 将消息写入缓存
+    _cacheMessages(type, targetId, messages, lastMessageId) {
+        const key = this._chatKey(type, targetId);
+        this.cache.chatHistory[key] = {
+            messages: messages,
+            lastMessageId: lastMessageId || (messages.length > 0 ? String(messages[messages.length - 1].message_id || messages[messages.length - 1].id) : null)
+        };
+    }
+
+    // 向缓存追加单条消息
+    _appendMessageToCache(type, targetId, message) {
+        const key = this._chatKey(type, targetId);
+        if (!this.cache.chatHistory[key]) {
+            this.cache.chatHistory[key] = { messages: [], lastMessageId: null };
+        }
+        this.cache.chatHistory[key].messages.push(message);
+        // 更新 lastMessageId（仅用服务端分配的 ID）
+        if (message.message_id) {
+            this.cache.chatHistory[key].lastMessageId = String(message.message_id);
+        }
+    }
+
+    // 启动定时同步
+    startSyncTimer() {
+        this.stopSyncTimer();
+        this.syncTimer = setInterval(() => {
+            this.syncCurrentChat();
+        }, this.SYNC_INTERVAL);
+    }
+
+    // 停止定时同步
+    stopSyncTimer() {
+        if (this.syncTimer) {
+            clearInterval(this.syncTimer);
+            this.syncTimer = null;
+        }
+    }
+
+    // 同步当前聊天
+    syncCurrentChat() {
+        const chat = this.state.currentChat;
+        if (!chat) return;
+
+        const key = this._chatKey(chat.type, chat.id);
+        const cache = this.cache.chatHistory[key];
+        if (!cache) return; // 无本地缓存，不触发同步
+
+        console.log(`[Sync] 定时同步: ${key}`);
+
+        // 用 limit=1 请求服务器最新消息，用于比较
+        ipcRenderer.removeAllListeners("home:SyncChatHistoryRes");
+        ipcRenderer.once("home:SyncChatHistoryRes", (event, data) => {
+            if (!data || data.length === 0) return;
+
+            const serverLatest = data[0];
+            const serverLatestId = String(serverLatest.message_id);
+
+            if (cache.lastMessageId && serverLatestId === cache.lastMessageId) {
+                console.log(`[Sync] ${key}: 消息一致，无需更新`);
+                return;
+            }
+
+            // ID 不一致 → 全量拉取
+            console.log(`[Sync] ${key}: 消息不一致 (本地=${cache.lastMessageId}, 服务器=${serverLatestId})，全量拉取`);
+            this._fetchFullHistory(chat.id, chat.type);
+        });
+
+        ipcRenderer.send("home:syncChatHistory", { targetId: chat.id, type: chat.type, limit: 1 });
+    }
+
+    // 全量拉取并更新缓存
+    _fetchFullHistory(targetId, type) {
+        ipcRenderer.removeAllListeners("home:LoadChatHistoryRes");
+        ipcRenderer.once("home:LoadChatHistoryRes", (event, data) => {
+            if (data && data.length > 0) {
+                this._cacheMessages(type, targetId, data, String(data[data.length - 1].message_id));
+
+                // 如果当前仍在查看该聊天，刷新显示
+                if (this.state.currentChat && String(this.state.currentChat.id) === String(targetId) && this.state.currentChat.type === type) {
+                    this._renderMessages(data, type);
+                }
+                console.log(`[Sync] 全量拉取完成: ${this._chatKey(type, targetId)}, ${data.length} 条消息`);
+            }
+        });
+        ipcRenderer.send("home:loadChatHistory", { targetId: targetId, type: type });
     }
 
     // 绑定事件监听器
@@ -45,6 +148,16 @@ class HomeApp {
                 this.handleUserAction(action);
             });
         });
+
+        // 侧边栏头像点击 - 触发头像上传
+        const userAvatar = document.querySelector('.user-avatar');
+        if (userAvatar) {
+            userAvatar.style.cursor = 'pointer';
+            userAvatar.title = '点击更换头像';
+            userAvatar.addEventListener('click', () => {
+                this.uploadUserAvatar();
+            });
+        }
 
         // 标签页切换
         document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -122,11 +235,61 @@ class HomeApp {
         ipcRenderer.on("home:MessageReceive", (event, data) => {
             this.handleReceivedMessage(data);
         });
+
+        // 监听群组通知（成员加入、离开等）
+        ipcRenderer.on("home:groupNotification", (event, data) => {
+            const typeMap = {
+                member_joined: '加入群组',
+                member_left: '离开了群组',
+                member_kicked: '被移出群组',
+                settings_updated: '群设置已更新'
+            };
+            const action = typeMap[data.type] || data.type;
+            const name = data.user_name || '';
+            this.showToast(`${name} ${action}`, 'info');
+        });
+
+        // 监听群组邀请
+        ipcRenderer.on("home:groupInvitation", (event, data) => {
+            this.showToast(`收到来自 ${data.inviter_name || '未知'} 的群「${data.group_name}」邀请`, 'info');
+        });
+
+        // 加载好友列表响应
+        ipcRenderer.on("home:LoadFriendsRes", (event, data) => {
+            this.state.friends = data;
+            this.updateFriendsList();
+            this.state.friends.forEach(friend => {
+                this.cache.friends[friend.id] = friend;
+            });
+        });
+
+        // 加载用户数据响应
+        ipcRenderer.on("home:LoadUserDataRes", (event, data) => {
+            this.state.currentUser = {
+                id: data.id, name: data.username, avatar: data.avatar, status: data.status
+            };
+            this.updateUserInfo();
+        });
+
+        // 加载群组列表响应
+        ipcRenderer.on("home:LoadGroupsRes", (event, data) => {
+            this.state.groups = data;
+            this.updateGroupsList();
+            this.state.groups.forEach(group => {
+                this.cache.groups[group.id] = group;
+            });
+        });
     }
 
     // 添加处理接收消息的方法
     handleReceivedMessage(messageData) {
         console.log("收到新消息:", messageData);
+
+        // 安全检查：currentUser 可能尚未通过异步 IPC 加载完成
+        if (!this.state.currentUser) {
+            console.warn("用户数据未加载完成，忽略消息:", messageData);
+            return;
+        }
 
         // 根据消息类型（私聊/群聊）确定目标ID
         let targetId, type;
@@ -139,6 +302,12 @@ class HomeApp {
             // 群聊消息
             targetId = messageData.group_id;
             type = 'group';
+            // 缓存群成员信息（来自服务端推送的 sender_info）
+            if (messageData.sender_info && targetId) {
+                if (!this.cache.groupMembers) this.cache.groupMembers = {};
+                if (!this.cache.groupMembers[targetId]) this.cache.groupMembers[targetId] = {};
+                this.cache.groupMembers[targetId][messageData.sender_id] = messageData.sender_info;
+            }
         } else {
             console.warn("未知的消息类型:", messageData.target_type);
             return;
@@ -156,8 +325,19 @@ class HomeApp {
         // 更新会话列表
         this.updateConversationWithMessage(targetId, type, message);
 
+        // 写入消息缓存（使用服务端原始格式，与 _fetchFullHistory 返回格式一致）
+        this._appendMessageToCache(type, targetId, {
+            message_id: messageData.message_id,
+            sender_id: messageData.sender_id,
+            receiver_id: type === 'friend' ? messageData.target_id : undefined,
+            group_id: type === 'group' ? targetId : undefined,
+            content: messageData.content,
+            timestamp: messageData.timestamp,
+            type: 'text'
+        });
+
         // 如果当前正在与消息发送方/群组聊天，则显示消息
-        if (this.state.currentChat && ((type === 'friend' && this.state.currentChat.id === targetId) || (type === 'group' && this.state.currentChat.id === targetId))) {
+        if (this.state.currentChat && String(this.state.currentChat.id) === String(targetId)) {
             this.appendMessageToChat(message);
         }
     }
@@ -167,7 +347,7 @@ class HomeApp {
         let conversation = {
             id: Date.now(), // 临时ID，后续可以从服务器获取
             type: type,
-            lastMessage: message.content.text || message.content,
+            lastMessage: (message.content && message.content.text) || message.content || '',
             unread: 1,
             time: this.formatRelativeTime(message.time),
             lastMessageTime: message.time,
@@ -212,7 +392,7 @@ class HomeApp {
         messageEl.innerHTML = `
         <div class="message-content">
             ${type === 'group' && !isSent ? `<div class="message-sender">${senderName}</div>` : ''}
-            <div class="message-text">${message.content.text || message.content}</div>
+            <div class="message-text">${(message.content && message.content.text) || message.content || ''}</div>
             <div class="message-time">${this.formatTime(message.time)}</div>
         </div>
     `;
@@ -259,7 +439,14 @@ class HomeApp {
             const friend = this.cache.friends[senderId];
             return friend ? friend.nickname : `用户${senderId}`;
         } else {
-            // 群聊中，先从好友缓存中查找
+            // 群聊中，先从群成员缓存中查找
+            if (this.cache.groupMembers && this.state.currentChat) {
+                const groupMembers = this.cache.groupMembers[this.state.currentChat.id];
+                if (groupMembers && groupMembers[senderId]) {
+                    return groupMembers[senderId].nickname || groupMembers[senderId].username;
+                }
+            }
+            // 再从好友缓存中查找
             const friend = this.cache.friends[senderId];
             return friend ? friend.nickname : `用户${senderId}`;
         }
@@ -267,17 +454,19 @@ class HomeApp {
 
     // 添加更新会话列表的方法
     updateConversationWithMessage(targetId, type, message) {
-        // 查找是否已有该会话
-        let conversation = this.state.conversations.find(conv => conv.targetId === targetId && conv.type === type);
+        // 查找是否已有该会话（使用字符串比较，确保类型一致）
+        let conversation = this.state.conversations.find(
+            conv => String(conv.targetId) === String(targetId) && conv.type === type
+        );
 
         if (conversation) {
             // 更新现有会话
-            conversation.lastMessage = message.content.text || message.content;
+            conversation.lastMessage = (message.content && message.content.text) || message.content || '';
             conversation.lastMessageTime = message.time;
             conversation.time = this.formatRelativeTime(message.time);
 
             // 如果当前没有打开这个会话，增加未读计数
-            if (!this.state.currentChat || this.state.currentChat.id !== targetId || this.state.currentChat.type !== type) {
+            if (!this.state.currentChat || String(this.state.currentChat.id) !== String(targetId) || this.state.currentChat.type !== type) {
                 conversation.unread = (conversation.unread || 0) + 1;
             }
         } else {
@@ -293,136 +482,6 @@ class HomeApp {
         this.updateConversationsList();
     }
 
-
-    // 加载模拟数据
-    loadMockData() {
-        // 模拟会话数据
-        this.state.conversations = [{
-            id: 1,
-            type: 'friend',
-            name: '张三',
-            avatar: 'https://via.placeholder.com/48',
-            lastMessage: '你好，最近怎么样？',
-            unread: 2,
-            time: '10:30',
-            lastMessageTime: new Date(Date.now() - 3600000),
-            targetId: 101
-        }, {
-            id: 2,
-            type: 'group',
-            name: '项目讨论群',
-            avatar: 'https://via.placeholder.com/48',
-            lastMessage: '@你 请查看项目文档',
-            unread: 5,
-            time: '昨天',
-            lastMessageTime: new Date(Date.now() - 86400000),
-            targetId: 201
-        }, {
-            id: 3,
-            type: 'friend',
-            name: '李四',
-            avatar: 'https://via.placeholder.com/48',
-            lastMessage: '好的，收到',
-            unread: 0,
-            time: '09:15',
-            lastMessageTime: new Date(Date.now() - 5400000),
-            targetId: 102
-        }];
-
-        // 模拟好友数据
-        // this.state.friends = []
-        ipcRenderer.on("home:LoadFriendsRes", (event, data) => {
-            this.state.friends = data;
-            this.updateFriendsList();
-            this.state.friends.forEach(friend => {
-                this.cache.friends[friend.id] = friend;
-            });
-
-        })
-        ipcRenderer.on("home:LoadUserDataRes", (event, data) => {
-            // console.log("home:LoadUserDataRes", data)
-            // 设置当前用户
-            this.state.currentUser = {
-                id: data.id, name: data.username, avatar: data.avatar, status: data.status
-            };
-            this.updateUserInfo()
-            // console.log(this.state.currentUser)
-
-        })
-        ipcRenderer.on("home:LoadGroupsRes", (event, data) => {
-            this.state.groups = data;
-            this.updateGroupsList();
-            this.state.groups.forEach(group => {
-                this.cache.groups[group.id] = group;
-            });
-        })
-        //     id: 101,
-        //     name: '张三',
-        //     nickname: '张三',
-        //     avatar: 'https://via.placeholder.com/40',
-        //     status: 'online',
-        //     department: '技术部',
-        //     tags: ['同事', '项目组A']
-        // }, {
-        //     id: 102,
-        //     name: '李四',
-        //     nickname: '李四',
-        //     avatar: 'https://via.placeholder.com/40',
-        //     status: 'away',
-        //     department: '产品部',
-        //     tags: ['同事']
-        // }, {
-        //     id: 103,
-        //     name: '王五',
-        //     nickname: '老王',
-        //     avatar: 'https://via.placeholder.com/40',
-        //     status: 'busy',
-        //     department: '设计部',
-        //     tags: ['朋友']
-        // }, {
-        //     id: 104,
-        //     name: '赵六',
-        //     nickname: '小赵',
-        //     avatar: 'https://via.placeholder.com/40',
-        //     status: 'offline',
-        //     department: '市场部',
-        //     tags: ['同事']
-        // }];
-
-        // 模拟群组数据
-        // this.state.groups = [{
-        //     id: 201,
-        //     name: '项目讨论群',
-        //     avatar: 'https://via.placeholder.com/40',
-        //     members: 15,
-        //     lastActive: '10:30',
-        //     description: '项目进度同步和问题讨论',
-        //     unread: 3,
-        //     ownerId: 101
-        // }, {
-        //     id: 202,
-        //     name: '技术交流群',
-        //     avatar: 'https://via.placeholder.com/40',
-        //     members: 42,
-        //     lastActive: '昨天',
-        //     description: '技术问题讨论和分享',
-        //     unread: 0,
-        //     ownerId: 102
-        // }, {
-        //     id: 203,
-        //     name: '公司通知群',
-        //     avatar: 'https://via.placeholder.com/40',
-        //     members: 200,
-        //     lastActive: '09:15',
-        //     description: '公司重要通知发布',
-        //     unread: 12,
-        //     ownerId: 100
-        // }];
-
-        // 缓存数据
-
-
-    }
 
     // 更新UI
     updateUI() {
@@ -471,10 +530,9 @@ class HomeApp {
         // 绑定点击事件
         container.querySelectorAll('.conversation-item').forEach(item => {
             item.addEventListener('click', (e) => {
-                const id = parseInt(e.currentTarget.dataset.id);
                 const type = e.currentTarget.dataset.type;
-                const targetId = parseInt(e.currentTarget.dataset.target);
-                this.selectConversation(id, type, targetId);
+                const targetId = e.currentTarget.dataset.target;
+                this.selectConversation(type, targetId);
             });
         });
     }
@@ -522,7 +580,7 @@ class HomeApp {
                     <div class="group-name">${group.name}</div>
                     <div class="group-meta">
                         <span class="members">${group.members} 人</span>
-                        <span class="last-active">${group.lastActive}</span>
+                        <span class="last-active">${this.formatRelativeTime(group.lastActive instanceof Date ? group.lastActive : new Date(group.lastActive || Date.now()))}</span>
                     </div>
                 </div>
                 ${group.unread > 0 ? `
@@ -563,6 +621,9 @@ class HomeApp {
                 item.style.display = chat.type === 'group' ? 'block' : 'none';
             });
 
+            // 切换聊天时先清空消息列表，避免旧消息闪现
+            document.getElementById('messagesList').innerHTML = '';
+
             // 加载聊天记录
             this.loadChatHistory(chat.id, chat.type);
         } else {
@@ -572,54 +633,87 @@ class HomeApp {
         }
     }
 
-    // 加载聊天记录
+    // 加载聊天记录（优先使用本地缓存）
     loadChatHistory(targetId, type) {
-        console.log("loadChatHistory", targetId, type)
-        const messagesList = document.getElementById('messagesList');
-        ipcRenderer.on("home:LoadChatHistoryRes", (event, data) => {
-            messagesList.innerHTML = data.map(msg => {
-                const isSent = msg.sender_id === this.state.currentUser.id;
-                console.log(msg)
-                console.log(this.state.currentUser.id);
-                const senderName = isSent ? '我' : this.getSenderName(msg.sender_id, type);
-                // this.cache.friends[]
+        console.log("loadChatHistory", targetId, type);
 
-                return `
+        // 启动定时同步（每次切换聊天都重启定时器）
+        this.startSyncTimer();
+
+        const cached = this._getCachedMessages(type, targetId);
+
+        if (cached && cached.length > 0) {
+            // 有缓存 → 立即渲染，不请求服务器
+            console.log(`[Cache] 命中缓存: ${this._chatKey(type, targetId)}, ${cached.length} 条消息`);
+            this._renderMessages(cached, type);
+            return;
+        }
+
+        // 无缓存 → 从服务器加载
+        console.log(`[Cache] 未命中: ${this._chatKey(type, targetId)}, 请求服务器`);
+        const messagesList = document.getElementById('messagesList');
+        messagesList.innerHTML = `
+            <div style="text-align: center; padding: 40px; color: #909399;">
+                <div class="loading-spinner" style="display: inline-block; width: 24px; height: 24px; border: 3px solid #e4e7ed; border-top: 3px solid #409eff; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 12px;"></div>
+                <div>加载聊天记录中...</div>
+            </div>
+        `;
+
+        ipcRenderer.removeAllListeners("home:LoadChatHistoryRes");
+        ipcRenderer.once("home:LoadChatHistoryRes", (event, data) => {
+            if (!data || data.length === 0) {
+                messagesList.innerHTML = `
+                    <div style="text-align: center; padding: 40px; color: #c0c4cc;">
+                        暂无聊天记录
+                    </div>
+                `;
+                // 即使无消息也建立空缓存，避免反复请求
+                this._cacheMessages(type, targetId, [], null);
+                return;
+            }
+
+            // 写入缓存
+            this._cacheMessages(type, targetId, data, String(data[data.length - 1].message_id));
+
+            // 渲染
+            this._renderMessages(data, type);
+        });
+
+        ipcRenderer.send("home:loadChatHistory", { targetId: targetId, type: type });
+    }
+
+    // 渲染消息列表到 DOM
+    _renderMessages(messages, type) {
+        const messagesList = document.getElementById('messagesList');
+        if (!messages || messages.length === 0) {
+            messagesList.innerHTML = `
+                <div style="text-align: center; padding: 40px; color: #c0c4cc;">
+                    暂无聊天记录
+                </div>
+            `;
+            return;
+        }
+
+        messagesList.innerHTML = messages.map(msg => {
+            const isSent = msg.sender_id === this.state.currentUser.id;
+            const senderName = isSent ? '我' : this.getSenderName(msg.sender_id, type);
+
+            return `
                 <div class="message-item ${isSent ? 'sent' : 'received'}">
                     <div class="message-content">
                         ${type === 'group' && !isSent ? `<div class="message-sender">${senderName}</div>` : ''}
-                        <div class="message-text">${msg.content.text}</div>
-                        <div class="message-time">${this.formatTime(msg.time)}</div>
+                        <div class="message-text">${(msg.content && msg.content.text) ? msg.content.text : (msg.content || '')}</div>
+                        <div class="message-time">${this.formatTime(msg.timestamp)}</div>
                     </div>
                 </div>
             `;
-            }).join('');
+        }).join('');
 
-            // 滚动到底部
-            setTimeout(() => {
-                const container = document.getElementById('messagesContainer');
-                container.scrollTop = container.scrollHeight;
-            }, 100);
-
-        })
-
-
-        // 模拟消息数据
-        // const messages = [{
-        //     id: 1, sender: targetId, content: '你好，最近怎么样？', time: new Date(Date.now() - 3600000), type: 'text'
-        // }, {
-        //     id: 2,
-        //     sender: this.state.currentUser.id,
-        //     content: '我很好，谢谢关心！',
-        //     time: new Date(Date.now() - 1800000),
-        //     type: 'text'
-        // }, {
-        //     id: 3, sender: targetId, content: '晚上一起吃个饭？', time: new Date(Date.now() - 600000), type: 'text'
-        // }];
-        // const messages = []
-        ipcRenderer.send("home:loadChatHistory", {targetId: targetId, type: type});
-
-
+        // 滚动到底部
+        setTimeout(() => {
+            const container = document.getElementById('messagesContainer');
+            container.scrollTop = container.scrollHeight;
+        }, 100);
     }
 
     // 切换标签页
@@ -665,7 +759,7 @@ class HomeApp {
         }
 
         const keyword = this.state.searchKeyword.toLowerCase();
-        return this.state.friends.filter(friend => friend.name.toLowerCase().includes(keyword) || friend.nickname.toLowerCase().includes(keyword) || friend.department.toLowerCase().includes(keyword));
+        return this.state.friends.filter(friend => friend.name.toLowerCase().includes(keyword) || (friend.nickname && friend.nickname.toLowerCase().includes(keyword)) || (friend.department && friend.department.toLowerCase().includes(keyword)));
     }
 
     // 过滤群组
@@ -675,13 +769,15 @@ class HomeApp {
         }
 
         const keyword = this.state.searchKeyword.toLowerCase();
-        return this.state.groups.filter(group => group.name.toLowerCase().includes(keyword) || group.description.toLowerCase().includes(keyword));
+        return this.state.groups.filter(group => group.name.toLowerCase().includes(keyword) || (group.description && group.description.toLowerCase().includes(keyword)));
     }
 
     // 选择会话
-    selectConversation(id, type, targetId) {
-        const conversation = this.state.conversations.find(c => c.id === id);
-        if (!conversation) return;
+    selectConversation(type, targetId) {
+        // 使用 targetId + type 定位会话（targetId 来自 data 属性，为字符串）
+        const conversation = this.state.conversations.find(
+            c => String(c.targetId) === String(targetId) && c.type === type
+        );
 
         if (type === 'friend') {
             this.selectFriend(targetId);
@@ -690,8 +786,12 @@ class HomeApp {
         }
 
         // 标记为已读
-        conversation.unread = 0;
+        if (conversation) {
+            conversation.unread = 0;
+        }
         this.updateConversationsList();
+        // 高亮会话项
+        this.highlightActiveItem('conversation', targetId);
     }
 
     // 选择好友
@@ -715,7 +815,11 @@ class HomeApp {
         if (!group) return;
 
         this.state.currentChat = {
-            id: groupId, type: 'group', name: group.name, avatar: group.avatar, members: group.members
+            id: groupId,
+            type: 'group',
+            name: group.name,
+            avatar: group.avatar,
+            members: group.members || 0
         };
 
         this.updateChatWindow();
@@ -735,6 +839,9 @@ class HomeApp {
         } else if (type === 'group') {
             document.querySelector(`.group-item[data-id="${id}"]`)?.classList.add('active');
         }
+
+        // 始终高亮对应的会话项（通过 data-target 匹配）
+        document.querySelector(`.conversation-item[data-target="${id}"]`)?.classList.add('active');
     }
 
     // 发送消息
@@ -790,53 +897,28 @@ class HomeApp {
 
         ipcRenderer.send("home:sendMessage", {
             ...message,
-            senderId: this.state.senderId,
+            senderId: this.state.currentUser.id,
             targetId: this.state.currentChat.id,
             type: this.state.currentChat.type
         });
 
-        // 模拟对方回复（仅演示用）
-        // if (this.state.currentChat.type === 'friend') {
-        //         //     setTimeout(() => {
-        //         //         this.simulateReply();
-        //         //     }, 1000);
-        //         // }
-    }
+        // 更新会话列表（更新已有会话的 lastMessage 或创建新会话）
+        this.updateConversationWithMessage(
+            this.state.currentChat.id,
+            this.state.currentChat.type,
+            message
+        );
 
-    // 模拟回复
-    simulateReply() {
-        if (!this.state.currentChat) return;
-
-        const replies = ['好的，收到', '明白了', '谢谢', '没问题', '好的，我会处理的', '了解'];
-
-        const reply = replies[Math.floor(Math.random() * replies.length)];
-
-        const message = {
-            id: Date.now() + 1, sender: this.state.currentChat.id, content: reply, time: new Date(), type: 'text'
-        };
-
-        const messagesList = document.getElementById('messagesList');
-        const isSent = false;
-        const senderName = this.getSenderName(message.sender, this.state.currentChat.type);
-        const type = this.state.currentChat.type;
-
-        const messageEl = document.createElement('div');
-        messageEl.className = `message-item ${isSent ? 'sent' : 'received'}`;
-        messageEl.innerHTML = `
-            <div class="message-content">
-                ${type === 'group' && !isSent ? `<div class="message-sender">${senderName}</div>` : ''}
-                <div class="message-text">${message.content}</div>
-                <div class="message-time">${this.formatTime(message.time)}</div>
-            </div>
-        `;
-
-        messagesList.appendChild(messageEl);
-
-        // 滚动到底部
-        setTimeout(() => {
-            const container = document.getElementById('messagesContainer');
-            container.scrollTop = container.scrollHeight;
-        }, 100);
+        // 写入消息缓存（客户端发送的消息暂无 server message_id，同步时会全量校正）
+        this._appendMessageToCache(this.state.currentChat.type, this.state.currentChat.id, {
+            message_id: null, // 客户端消息，尚无服务端 ID
+            sender_id: this.state.currentUser.id,
+            receiver_id: this.state.currentChat.type === 'friend' ? this.state.currentChat.id : undefined,
+            group_id: this.state.currentChat.type === 'group' ? this.state.currentChat.id : undefined,
+            content: message.content,
+            timestamp: message.time.getTime ? message.time.getTime() : Date.now(),
+            type: 'text'
+        });
     }
 
     // 切换下拉菜单
@@ -935,65 +1017,82 @@ class HomeApp {
     }
 
     // 显示创建群组模态框
+// home.js - 修改 showCreateGroupModal 方法
     showCreateGroupModal() {
         const modal = this.createModal({
-            title: '创建群组', body: `
-                <div class="form-group">
-                    <label class="form-label">群组名称</label>
-                    <input type="text" class="form-control" id="groupNameInput" placeholder="请输入群组名称">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">群组描述</label>
-                    <textarea class="form-control" id="groupDescriptionInput" placeholder="请输入群组描述（可选）" rows="3"></textarea>
-                </div>
-            `, buttons: [{text: '取消', type: 'secondary', action: 'cancel'}, {
-                text: '创建', type: 'primary', action: 'create'
-            }]
+            title: '创建群组',
+            body: `
+            <div class="form-group">
+                <label class="form-label">群组名称</label>
+                <input type="text" class="form-control" id="groupNameInput" placeholder="请输入群组名称">
+            </div>
+            <div class="form-group">
+                <label class="form-label">群组描述</label>
+                <textarea class="form-control" id="groupDescriptionInput" placeholder="请输入群组描述（可选）" rows="3"></textarea>
+            </div>
+        `,
+            buttons: [
+                { text: '取消', type: 'secondary', action: 'cancel' },
+                { text: '创建', type: 'primary', action: 'create' }
+            ]
         });
 
         modal.show();
+
+        // 处理创建结果
+        const createGroupHandler = (event, response) => {
+            if (response.success) {
+                const newGroup = {
+                    id: response.group_id,
+                    name: response.group_name,
+                    description: response.description,
+                    avatar: 'https://via.placeholder.com/48',
+                    members: response.member_count || 1,
+                    ownerId: response.owner_id,
+                    lastActive: new Date()
+                };
+                this.state.groups.push(newGroup);
+                this.cache.groups[newGroup.id] = newGroup;
+                this.updateGroupsList();
+                this.showToast('群组创建成功', 'success');
+                modal.hide();
+            } else {
+                this.showToast(response.message || '创建群组失败', 'error');
+            }
+            ipcRenderer.removeListener('home:createGroupRes', createGroupHandler);
+        };
+
+        ipcRenderer.on('home:createGroupRes', createGroupHandler);
 
         modal.onButtonClick = (action) => {
             if (action === 'create') {
                 const nameInput = document.getElementById('groupNameInput');
                 const descInput = document.getElementById('groupDescriptionInput');
+                const name = nameInput.value.trim();
+                const description = descInput.value.trim();
 
-                if (!nameInput.value.trim()) {
+                if (!name) {
                     this.showToast('请输入群组名称', 'warning');
                     return;
                 }
 
-                // 创建模拟群组
-                const newGroup = {
-                    id: Date.now(),
-                    name: nameInput.value.trim(),
-                    avatar: 'https://via.placeholder.com/40',
-                    members: 1,
-                    lastActive: '刚刚',
-                    description: descInput.value.trim(),
-                    unread: 0,
-                    ownerId: this.state.currentUser.id
-                };
+                // 发送创建请求
+                ipcRenderer.send('home:createGroup', { name, description });
 
-                this.state.groups.push(newGroup);
-                this.cache.groups[newGroup.id] = newGroup;
-                this.updateGroupsList();
-
-                this.showToast('群组创建成功', 'success');
-                modal.hide();
+                // 可选：禁用按钮防止重复点击，这里省略
             } else if (action === 'cancel') {
+                ipcRenderer.removeListener('home:createGroupRes', createGroupHandler);
                 modal.hide();
             }
         };
     }
-
     // 显示加入群组模态框
     showJoinGroupModal() {
         const modal = this.createModal({
             title: '加入群组', body: `
                 <div class="form-group">
-                    <label class="form-label">群组ID或邀请码</label>
-                    <input type="text" class="form-control" id="joinGroupInput" placeholder="请输入群组ID或邀请码">
+                    <label class="form-label">群组ID</label>
+                    <input type="text" class="form-control" id="joinGroupInput" placeholder="请输入群组ID">
                 </div>
             `, buttons: [{text: '取消', type: 'secondary', action: 'cancel'}, {
                 text: '加入', type: 'primary', action: 'join'
@@ -1002,18 +1101,48 @@ class HomeApp {
 
         modal.show();
 
+        // 处理加入群组响应
+        const joinGroupHandler = (event, response) => {
+            if (response.success) {
+                this.showToast(response.message || '成功加入群组', 'success');
+                // 刷新群组列表
+                ipcRenderer.send("home:getGroupInfo", { groupId: response.group_id });
+                // 添加群组到本地列表
+                const newGroup = {
+                    id: response.group_id,
+                    name: response.group_name,
+                    avatar: 'https://via.placeholder.com/48',
+                    members: 1,
+                    description: '',
+                    lastActive: new Date()
+                };
+                if (!this.cache.groups[newGroup.id]) {
+                    this.state.groups.push(newGroup);
+                    this.cache.groups[newGroup.id] = newGroup;
+                    this.updateGroupsList();
+                }
+                modal.hide();
+            } else {
+                this.showToast(response.message || '加入群组失败', 'error');
+            }
+            ipcRenderer.removeListener('home:joinGroupRes', joinGroupHandler);
+        };
+
+        ipcRenderer.on('home:joinGroupRes', joinGroupHandler);
+
         modal.onButtonClick = (action) => {
             if (action === 'join') {
                 const input = document.getElementById('joinGroupInput');
+                const groupId = input.value.trim();
 
-                if (!input.value.trim()) {
-                    this.showToast('请输入群组ID或邀请码', 'warning');
+                if (!groupId) {
+                    this.showToast('请输入群组ID', 'warning');
                     return;
                 }
 
-                this.showToast('已发送加入申请', 'success');
-                modal.hide();
+                ipcRenderer.send('home:joinGroup', { groupId: groupId });
             } else if (action === 'cancel') {
+                ipcRenderer.removeListener('home:joinGroupRes', joinGroupHandler);
                 modal.hide();
             }
         };
@@ -1094,7 +1223,7 @@ class HomeApp {
                     </div>
                     <div class="detail-item">
                         <span class="detail-label">标签</span>
-                        <span class="detail-value">${user.tags.join(', ')}</span>
+                        <span class="detail-value">${Array.isArray(user.tags) ? user.tags.join(', ') : (user.tags || '无')}</span>
                     </div>
                 </div>
             `, buttons: [{text: '关闭', type: 'primary', action: 'close'}]
@@ -1107,26 +1236,47 @@ class HomeApp {
         };
     }
 
-    // 显示群组信息模态框
+    // 显示群组信息模态框（从服务器获取详细信息含成员列表）
     showGroupInfo(groupId) {
         const group = this.cache.groups[groupId];
         if (!group) return;
 
+        // 判断当前用户是否为群主或管理员（后续通过服务器返回的 info 确认）
+        const currentUserId = this.state.currentUser ? this.state.currentUser.id : null;
+        const isOwner = String(group.ownerId) === String(currentUserId);
+
+        const avatarUploadHtml = (isOwner || true) ? `
+            <div style="position: relative; display: inline-block; cursor: pointer;" id="groupAvatarUploadWrapper">
+                <img src="${group.avatar}" alt="${group.name}" class="avatar" id="groupAvatarPreview"
+                     style="width: 80px; height: 80px; border-radius: 8px; object-fit: cover; border: 2px solid #e4e7ed;">
+                <div style="position: absolute; bottom: 0; right: 0; width: 24px; height: 24px; background: #409eff; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 12px; border: 2px solid white;">
+                    <i class="fas fa-camera" style="font-size: 10px;"></i>
+                </div>
+            </div>
+        ` : `
+            <img src="${group.avatar}" alt="${group.name}" class="avatar"
+                 style="width: 80px; height: 80px; border-radius: 8px; object-fit: cover;">
+        `;
+
+        // 先显示基础信息（带加载状态）
         const modal = this.createModal({
             title: '群组信息', body: `
                 <div class="profile-header">
-                    <img src="${group.avatar}" alt="${group.name}" class="avatar" style="width: 80px; height: 80px; border-radius: 8px;">
+                    ${avatarUploadHtml}
                     <h3 style="margin-top: 12px;">${group.name}</h3>
-                    <div style="color: #909399; margin-bottom: 20px;">${group.members} 名成员</div>
+                    <div style="color: #909399; margin-bottom: 20px;">${group.members || 0} 名成员</div>
+                    <div id="groupAvatarUploadStatus" style="font-size: 12px;"></div>
                 </div>
                 <div class="profile-details">
                     <div class="detail-item">
                         <span class="detail-label">描述</span>
                         <span class="detail-value">${group.description || '暂无描述'}</span>
                     </div>
-                    <div class="detail-item">
-                        <span class="detail-label">未读消息</span>
-                        <span class="detail-value">${group.unread} 条</span>
+                </div>
+                <div style="margin-top: 16px;">
+                    <div style="font-weight: 500; margin-bottom: 8px; color: #606266;">成员列表</div>
+                    <div id="groupMemberList" style="max-height: 300px; overflow-y: auto;">
+                        <div style="text-align: center; color: #909399; padding: 20px;">加载中...</div>
                     </div>
                 </div>
             `, buttons: [{text: '关闭', type: 'primary', action: 'close'}]
@@ -1134,9 +1284,266 @@ class HomeApp {
 
         modal.show();
 
+        // 群头像点击上传
+        const groupAvatarWrapper = document.getElementById('groupAvatarUploadWrapper');
+        if (groupAvatarWrapper) {
+            groupAvatarWrapper.addEventListener('click', () => {
+                this.uploadGroupAvatar(groupId);
+            });
+        }
+
         modal.onButtonClick = (action) => {
+            ipcRenderer.removeAllListeners('home:getGroupInfoRes');
+            ipcRenderer.removeAllListeners('home:uploadGroupAvatarRes');
             modal.hide();
         };
+
+        // 从服务器获取详细信息
+        ipcRenderer.removeAllListeners('home:getGroupInfoRes');
+        ipcRenderer.once('home:getGroupInfoRes', (event, response) => {
+            const memberListEl = document.getElementById('groupMemberList');
+            if (!memberListEl) return; // 模态框已关闭
+
+            if (response.group_info && response.members) {
+                // 更新群组信息
+                const info = response.group_info;
+                const members = response.members;
+
+                // 缓存成员信息（用于消息发送者名称显示）
+                members.forEach(m => {
+                    if (!this.cache.groupMembers) this.cache.groupMembers = {};
+                    if (!this.cache.groupMembers[info.group_id]) this.cache.groupMembers[info.group_id] = {};
+                    this.cache.groupMembers[info.group_id][m.user_id] = m;
+                });
+
+                // 判断当前用户在群中的角色
+                const currentUserId = this.state.currentUser ? this.state.currentUser.id : null;
+                const currentMember = members.find(m => Number(m.user_id) === Number(currentUserId));
+                const currentUserRole = currentMember ? currentMember.role : 'member';
+                const canManage = currentUserRole === 'owner' || currentUserRole === 'admin';
+
+                const roleMap = { owner: '群主', admin: '管理员', member: '成员' };
+                memberListEl.innerHTML = members.map(m => {
+                    const onlineStyle = m.is_online ? 'color: #52c41a;' : 'color: #909399;';
+                    const onlineText = m.is_online ? '在线' : '离线';
+                    const roleText = roleMap[m.role] || m.role;
+                    const roleBadge = m.role === 'owner' ? ' style="color: #e6a23c; font-weight: 500;"'
+                        : m.role === 'admin' ? ' style="color: #409eff; font-weight: 500;"' : '';
+                    const isSelf = Number(m.user_id) === Number(currentUserId);
+                    const isOwner = m.role === 'owner';
+
+                    // 操作按钮：当前用户是群主/管理员，且目标不是自己和群主
+                    let actionsHtml = '';
+                    if (canManage && !isSelf && !isOwner) {
+                        // 管理员不能操作其他管理员
+                        if (currentUserRole === 'admin' && m.role === 'admin') {
+                            // 无操作权限
+                        } else {
+                            const displayName = (m.nickname || m.username || '').replace(/'/g, "\\'");
+                            actionsHtml = `
+                                <div style="display: flex; gap: 4px; margin-left: 8px;">
+                                    <button class="member-action-btn ban-btn" data-user-id="${m.user_id}" data-user-name="${displayName}" data-group-id="${info.group_id}"
+                                        style="padding: 2px 8px; font-size: 11px; border: 1px solid #e6a23c; color: #e6a23c; border-radius: 4px; background: transparent; cursor: pointer;"
+                                        title="禁言成员">禁言</button>
+                                    <button class="member-action-btn kick-btn" data-user-id="${m.user_id}" data-user-name="${displayName}" data-group-id="${info.group_id}"
+                                        style="padding: 2px 8px; font-size: 11px; border: 1px solid #f56c6c; color: #f56c6c; border-radius: 4px; background: transparent; cursor: pointer;"
+                                        title="踢出群组">踢出</button>
+                                </div>
+                            `;
+                        }
+                    }
+
+                    return `
+                        <div style="display: flex; align-items: center; padding: 8px 0; border-bottom: 1px solid #f0f0f0;">
+                            <img src="${m.avatar || 'https://via.placeholder.com/32'}" style="width: 32px; height: 32px; border-radius: 50%; margin-right: 10px;">
+                            <div style="flex: 1;">
+                                <div style="font-size: 14px;">${m.nickname || m.username}${m.group_nickname ? ` (${m.group_nickname})` : ''}${isSelf ? ' <span style="color: #909399; font-size: 11px;">(我)</span>' : ''}</div>
+                                <div style="font-size: 12px; ${onlineStyle}">${onlineText}</div>
+                            </div>
+                            <span${roleBadge} style="font-size: 12px;">${roleText}</span>
+                            ${actionsHtml}
+                        </div>
+                    `;
+                }).join('');
+
+                // 绑定操作按钮事件
+                memberListEl.querySelectorAll('.kick-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        const userId = e.currentTarget.dataset.userId;
+                        const userName = e.currentTarget.dataset.userName;
+                        const gId = e.currentTarget.dataset.groupId;
+                        this.kickMember(gId, userId, userName);
+                    });
+                });
+                memberListEl.querySelectorAll('.ban-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        const userId = e.currentTarget.dataset.userId;
+                        const userName = e.currentTarget.dataset.userName;
+                        const gId = e.currentTarget.dataset.groupId;
+                        this.showBanMemberModal(gId, userId, userName);
+                    });
+                });
+            } else {
+                memberListEl.innerHTML = '<div style="text-align: center; color: #f56c6c; padding: 20px;">获取成员列表失败</div>';
+            }
+        });
+
+        ipcRenderer.send('home:getGroupInfo', { groupId: groupId });
+    }
+
+    // 踢出群成员
+    kickMember(groupId, targetUserId, userName) {
+        if (!confirm(`确定要将「${userName}」踢出群组吗？`)) return;
+
+        // 可选输入原因
+        const reason = prompt('请输入踢出原因（可选）：') || '';
+
+        ipcRenderer.removeAllListeners('home:kickMemberRes');
+        ipcRenderer.once('home:kickMemberRes', (event, response) => {
+            if (response.success) {
+                this.showToast(`已将「${userName}」踢出群组`, 'success');
+                // 刷新群信息（成员列表会更新）
+                if (this.state.currentChat && String(this.state.currentChat.id) === String(groupId)) {
+                    this.showGroupInfo(groupId);
+                }
+            } else {
+                this.showToast(response.message || '踢出成员失败', 'error');
+            }
+        });
+
+        ipcRenderer.send('home:kickMember', { groupId, targetUserId, reason });
+    }
+
+    // 显示禁言成员模态框
+    showBanMemberModal(groupId, targetUserId, userName) {
+        const modal = this.createModal({
+            title: `禁言成员 - ${userName}`,
+            body: `
+                <div style="margin-bottom: 16px;">
+                    <label class="form-label">选择禁言时长</label>
+                    <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px;">
+                        <button class="ban-duration-btn" data-seconds="300" style="padding: 6px 14px; border: 1px solid #dcdfe6; border-radius: 6px; background: #f5f7fa; cursor: pointer;">5 分钟</button>
+                        <button class="ban-duration-btn" data-seconds="1800" style="padding: 6px 14px; border: 1px solid #dcdfe6; border-radius: 6px; background: #f5f7fa; cursor: pointer;">30 分钟</button>
+                        <button class="ban-duration-btn" data-seconds="3600" style="padding: 6px 14px; border: 1px solid #dcdfe6; border-radius: 6px; background: #f5f7fa; cursor: pointer;">1 小时</button>
+                        <button class="ban-duration-btn" data-seconds="86400" style="padding: 6px 14px; border: 1px solid #dcdfe6; border-radius: 6px; background: #f5f7fa; cursor: pointer;">1 天</button>
+                        <button class="ban-duration-btn" data-seconds="604800" style="padding: 6px 14px; border: 1px solid #dcdfe6; border-radius: 6px; background: #f5f7fa; cursor: pointer;">7 天</button>
+                        <button class="ban-duration-btn" data-seconds="forever" style="padding: 6px 14px; border: 1px solid #f56c6c; color: #f56c6c; border-radius: 6px; background: #fef0f0; cursor: pointer;">永久禁言</button>
+                    </div>
+                </div>
+                <div style="margin-bottom: 12px;">
+                    <label class="form-label">或自定义时长（秒）</label>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="number" class="form-control" id="banCustomSeconds" placeholder="输入秒数（最少60）" min="60" style="flex: 1;">
+                        <button id="banCustomBtn" style="padding: 6px 16px; border: 1px solid #409eff; color: #409eff; border-radius: 6px; background: transparent; cursor: pointer; white-space: nowrap;">确认禁言</button>
+                    </div>
+                </div>
+                <div style="padding: 10px; background: #fdf6ec; border-radius: 6px; margin-bottom: 8px;">
+                    <button id="unbanBtn" style="padding: 6px 14px; border: 1px solid #52c41a; color: #52c41a; border-radius: 6px; background: transparent; cursor: pointer; width: 100%;">解除禁言</button>
+                </div>
+            `,
+            buttons: [{ text: '取消', type: 'secondary', action: 'cancel' }]
+        });
+
+        modal.show();
+
+        ipcRenderer.removeAllListeners('home:banMemberRes');
+        ipcRenderer.on('home:banMemberRes', (event, response) => {
+            if (response.success) {
+                this.showToast(response.message || '操作成功', 'success');
+                modal.hide();
+            } else {
+                this.showToast(response.message || '禁言操作失败', 'error');
+            }
+        });
+
+        // 预设时长按钮
+        modal.modalBody.querySelectorAll('.ban-duration-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const seconds = btn.dataset.seconds;
+                ipcRenderer.send('home:banMember', { groupId, targetUserId, time: seconds === 'forever' ? 'forever' : Number(seconds) });
+            });
+        });
+
+        // 解除禁言按钮
+        const unbanBtn = document.getElementById('unbanBtn');
+        if (unbanBtn) {
+            unbanBtn.addEventListener('click', () => {
+                ipcRenderer.send('home:banMember', { groupId, targetUserId, time: 0 });
+            });
+        }
+
+        // 自定义时长确认按钮
+        const banCustomBtn = document.getElementById('banCustomBtn');
+        const banCustomInput = document.getElementById('banCustomSeconds');
+        if (banCustomBtn && banCustomInput) {
+            const submitCustom = () => {
+                const seconds = Number(banCustomInput.value);
+                if (!seconds || seconds < 60) {
+                    this.showToast('请输入至少 60 秒的禁言时长', 'warning');
+                    return;
+                }
+                ipcRenderer.send('home:banMember', { groupId, targetUserId, time: seconds });
+            };
+            banCustomBtn.addEventListener('click', submitCustom);
+            banCustomInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); submitCustom(); }
+            });
+        }
+
+        modal.onButtonClick = (action) => {
+            if (action === 'cancel') {
+                ipcRenderer.removeAllListeners('home:banMemberRes');
+                modal.hide();
+            }
+        };
+    }
+
+    // 上传群头像
+    uploadGroupAvatar(groupId) {
+        const statusEl = document.getElementById('groupAvatarUploadStatus');
+        if (statusEl) {
+            statusEl.style.color = '#409eff';
+            statusEl.textContent = '正在选择文件...';
+        }
+
+        ipcRenderer.removeAllListeners('home:uploadGroupAvatarRes');
+
+        ipcRenderer.once('home:uploadGroupAvatarRes', (event, response) => {
+            if (response.success) {
+                const preview = document.getElementById('groupAvatarPreview');
+                if (preview && response.avatar_url) {
+                    preview.src = response.avatar_url + '?t=' + Date.now();
+                }
+
+                // 更新群组缓存
+                if (this.cache.groups[groupId]) {
+                    this.cache.groups[groupId].avatar = response.avatar_url;
+                }
+                // 更新群组列表 UI
+                this.updateGroupsList();
+                // 更新聊天窗口头像
+                if (this.state.currentChat && String(this.state.currentChat.id) === String(groupId)) {
+                    this.state.currentChat.avatar = response.avatar_url;
+                    document.querySelector('.chat-avatar .avatar').src = response.avatar_url;
+                }
+
+                if (statusEl) {
+                    statusEl.style.color = '#52c41a';
+                    statusEl.textContent = '群头像上传成功';
+                }
+                this.showToast('群头像上传成功', 'success');
+            } else {
+                if (statusEl) {
+                    statusEl.style.color = '#f56c6c';
+                    statusEl.textContent = response.message || '上传失败';
+                }
+                if (response.message !== '已取消') {
+                    this.showToast(response.message || '群头像上传失败', 'error');
+                }
+            }
+        });
+
+        ipcRenderer.send('home:uploadGroupAvatar', { groupId: groupId });
     }
 
     // 显示查找聊天记录模态框
@@ -1175,15 +1582,17 @@ class HomeApp {
 
     // 显示邀请成员模态框
     showInviteMemberModal() {
+        const groupId = this.state.currentChat ? this.state.currentChat.id : null;
+        if (!groupId) {
+            this.showToast('请先选择一个群组', 'warning');
+            return;
+        }
+
         const modal = this.createModal({
             title: '邀请成员', body: `
                 <div class="form-group">
                     <label class="form-label">用户ID（多个用逗号分隔）</label>
                     <input type="text" class="form-control" id="inviteMembersInput" placeholder="请输入用户ID，多个用逗号分隔">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">邀请消息（可选）</label>
-                    <textarea class="form-control" id="inviteMessageInput" placeholder="请输入邀请消息" rows="3"></textarea>
                 </div>
             `, buttons: [{text: '取消', type: 'secondary', action: 'cancel'}, {
                 text: '发送邀请', type: 'primary', action: 'invite'
@@ -1192,11 +1601,41 @@ class HomeApp {
 
         modal.show();
 
+        // 处理邀请响应
+        const inviteHandler = (event, response) => {
+            if (response.success) {
+                const successCount = response.success_invites ? response.success_invites.length : 0;
+                const failedCount = response.failed_invites ? response.failed_invites.length : 0;
+                let msg = `成功邀请 ${successCount} 人`;
+                if (failedCount > 0) msg += `，${failedCount} 人邀请失败`;
+                this.showToast(msg, successCount > 0 ? 'success' : 'warning');
+                modal.hide();
+            } else {
+                this.showToast(response.message || '邀请失败', 'error');
+            }
+            ipcRenderer.removeListener('home:inviteMemberRes', inviteHandler);
+        };
+
+        ipcRenderer.on('home:inviteMemberRes', inviteHandler);
+
         modal.onButtonClick = (action) => {
             if (action === 'invite') {
-                this.showToast('邀请已发送', 'success');
-                modal.hide();
+                const input = document.getElementById('inviteMembersInput');
+                const rawValue = input.value.trim();
+                if (!rawValue) {
+                    this.showToast('请输入用户ID', 'warning');
+                    return;
+                }
+
+                const inviteeIds = rawValue.split(',').map(id => id.trim()).filter(id => id);
+                if (inviteeIds.length === 0) {
+                    this.showToast('请输入有效的用户ID', 'warning');
+                    return;
+                }
+
+                ipcRenderer.send('home:inviteMember', { groupId: groupId, inviteeIds: inviteeIds });
             } else if (action === 'cancel') {
+                ipcRenderer.removeListener('home:inviteMemberRes', inviteHandler);
                 modal.hide();
             }
         };
@@ -1206,37 +1645,106 @@ class HomeApp {
     clearChatHistory() {
         if (confirm('确定要清空聊天记录吗？此操作不可恢复。')) {
             document.getElementById('messagesList').innerHTML = '';
+            // 同时清除本地缓存
+            if (this.state.currentChat) {
+                const key = this._chatKey(this.state.currentChat.type, this.state.currentChat.id);
+                delete this.cache.chatHistory[key];
+            }
             this.showToast('聊天记录已清空', 'success');
         }
     }
 
     // 显示个人资料模态框
     showProfileModal() {
+        const currentUser = this.state.currentUser;
+        const avatarUrl = currentUser.avatar || 'https://via.placeholder.com/80';
+
         const modal = this.createModal({
             title: '个人资料', body: `
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <div class="avatar-upload-wrapper" id="avatarUploadWrapper" style="position: relative; display: inline-block; cursor: pointer;">
+                        <img src="${avatarUrl}" alt="头像" class="avatar" id="profileAvatarPreview"
+                             style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover; border: 2px solid #e4e7ed;">
+                        <div style="position: absolute; bottom: 0; right: 0; width: 28px; height: 28px; background: #409eff; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 14px; border: 2px solid white;">
+                            <i class="fas fa-camera" style="font-size: 12px;"></i>
+                        </div>
+                    </div>
+                    <div style="margin-top: 8px; color: #909399; font-size: 12px;">点击头像更换（支持 jpg/png/webp/gif，不超过 2MB）</div>
+                    <div id="avatarUploadStatus" style="margin-top: 4px; font-size: 12px;"></div>
+                </div>
                 <div class="form-group">
                     <label class="form-label">昵称</label>
-                    <input type="text" class="form-control" value="${this.state.currentUser.name}">
+                    <input type="text" class="form-control" value="${currentUser.name}" readonly style="background: #f5f7fa;">
                 </div>
                 <div class="form-group">
                     <label class="form-label">个性签名</label>
                     <textarea class="form-control" rows="3" placeholder="请输入个性签名"></textarea>
                 </div>
-            `, buttons: [{text: '取消', type: 'secondary', action: 'cancel'}, {
-                text: '保存', type: 'primary', action: 'save'
-            }]
+            `, buttons: [{text: '关闭', type: 'primary', action: 'close'}]
         });
 
         modal.show();
 
+        // 头像点击上传
+        const wrapper = document.getElementById('avatarUploadWrapper');
+        if (wrapper) {
+            wrapper.addEventListener('click', () => {
+                this.uploadUserAvatar();
+            });
+        }
+
         modal.onButtonClick = (action) => {
-            if (action === 'save') {
-                this.showToast('资料保存成功', 'success');
-                modal.hide();
-            } else if (action === 'cancel') {
+            if (action === 'close') {
+                ipcRenderer.removeAllListeners('home:uploadAvatarRes');
                 modal.hide();
             }
         };
+    }
+
+    // 上传用户头像
+    uploadUserAvatar() {
+        const statusEl = document.getElementById('avatarUploadStatus');
+        if (statusEl) {
+            statusEl.style.color = '#409eff';
+            statusEl.textContent = '正在选择文件...';
+        }
+
+        // 清除旧监听器，防止重复注册
+        ipcRenderer.removeAllListeners('home:uploadAvatarRes');
+
+        ipcRenderer.once('home:uploadAvatarRes', (event, response) => {
+            if (response.success) {
+                // 更新头像预览
+                const preview = document.getElementById('profileAvatarPreview');
+                if (preview && response.avatar_url) {
+                    // 加时间戳防缓存
+                    preview.src = response.avatar_url + '?t=' + Date.now();
+                }
+
+                // 更新用户状态
+                if (this.state.currentUser) {
+                    this.state.currentUser.avatar = response.avatar_url;
+                }
+                // 更新侧边栏头像
+                this.updateUserInfo();
+
+                if (statusEl) {
+                    statusEl.style.color = '#52c41a';
+                    statusEl.textContent = '头像上传成功';
+                }
+                this.showToast('头像上传成功', 'success');
+            } else {
+                if (statusEl) {
+                    statusEl.style.color = '#f56c6c';
+                    statusEl.textContent = response.message || '上传失败';
+                }
+                if (response.message !== '已取消') {
+                    this.showToast(response.message || '头像上传失败', 'error');
+                }
+            }
+        });
+
+        ipcRenderer.send('home:uploadAvatar');
     }
 
     // 显示系统设置模态框
@@ -1376,18 +1884,6 @@ class HomeApp {
         // 可以在这里更新消息状态（如将消息标记为已发送）
     }
 
-    // getSenderName(senderId, type) {
-    //     if (senderId === this.state.currentUser.id) return '我';
-    //
-    //     if (type === 'friend') {
-    //         const friend = this.cache.friends[senderId];
-    //         return friend ? friend.nickname : `用户${senderId}`;
-    //     } else {
-    //         // 群聊中，可以缓存群成员信息
-    //         return `用户${senderId}`;
-    //     }
-    // }
-
     formatTime(time) {
         if (!time) return '';
         const date = new Date(time);
@@ -1467,6 +1963,11 @@ document.addEventListener('DOMContentLoaded', () => {
         
         .btn-secondary:hover {
             background-color: #e4e7ed;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
     `;
     document.head.appendChild(style);
