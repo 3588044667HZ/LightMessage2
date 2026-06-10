@@ -11,11 +11,11 @@
           <div class="input-with-icon">
             <span class="icon">👤</span>
             <input
-              v-model="form.userid"
-              type="text"
-              class="form-control"
-              placeholder="请输入用户ID"
-              required
+                v-model="form.userid"
+                type="text"
+                class="form-control"
+                placeholder="请输入用户ID"
+                required
             />
           </div>
         </div>
@@ -24,11 +24,11 @@
           <div class="input-with-icon">
             <span class="icon">🔒</span>
             <input
-              v-model="form.password"
-              :type="showPassword ? 'text' : 'password'"
-              class="form-control"
-              placeholder="请输入密码"
-              required
+                v-model="form.password"
+                :type="showPassword ? 'text' : 'password'"
+                class="form-control"
+                placeholder="请输入密码"
+                required
             />
           </div>
         </div>
@@ -37,18 +37,18 @@
           <div class="input-with-icon">
             <span class="icon">🌐</span>
             <input
-              v-model="form.server"
-              type="text"
-              class="form-control"
-              placeholder="ws://localhost:8765"
-              required
+                v-model="form.server"
+                type="text"
+                class="form-control"
+                placeholder="ws://localhost:8765"
+                required
             />
           </div>
         </div>
 
         <div class="form-group">
           <label class="checkbox-label">
-            <input v-model="form.rememberMe" type="checkbox" />
+            <input v-model="form.rememberMe" type="checkbox"/>
             记住我
           </label>
         </div>
@@ -64,12 +64,12 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
-import { useRouter } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
-import { ipcOn } from '@/composables/useIpc'
+import {ref, reactive} from 'vue'
+import {useRouter} from 'vue-router'
+import {useAuthStore} from '@/stores/auth'
+import {ipcOn} from '@/composables/useIpc'
 
-const { ipcRenderer } = window.require('electron')
+const {ipcRenderer} = window.require('electron')
 const router = useRouter()
 const auth = useAuthStore()
 
@@ -86,6 +86,7 @@ const errorMsg = ref('')
 
 // 监听登录结果
 ipcOn('login:success', (_event, data) => {
+  console.log('[LoginView] login:success received:', data)
   auth.setUser({
     id: data.user_id,
     username: data.username,
@@ -107,12 +108,12 @@ function handleLogin() {
   loading.value = true
 
   ipcRenderer.send(
-    'login',
-    Number(form.userid),
-    form.password,
-    form.rememberMe,
-    form.server
-  )
+      'login',
+      Number(form.userid),
+      form.password,
+      form.rememberMe,
+      form.server
+  );
 
   // 15 秒超时保护
   setTimeout(() => {

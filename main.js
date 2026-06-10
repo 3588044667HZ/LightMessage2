@@ -72,10 +72,10 @@ const createWindow = () => {
             }
             // Vue3: 通知渲染进程登录成功，Vue Router 处理导航到 /home
             mainWindow.webContents.send("login:success", {
-                id: data.user_id,
+                user_id: data.user_id,
                 username: data.username,
-                avatar: data.user_info.avatar,
-                status: data.user_info.status
+                token: data.token,
+                user_info: data.user_info || { avatar: '', status: 'online' }
             })
         } else {
             console.log("登录失败 msg:", data.message);
