@@ -1,5 +1,5 @@
 {
-  "filename": "E:\\lightMessage2\\data\\im.db",
+  "filename": "C:\\Users\\Administrator\\WebstormProjects\\LightMessage2\\data\\im.db",
   "collections": [
     {
       "name": "settings",
@@ -8,10 +8,10 @@
           "key": "autoLogin",
           "value": false,
           "meta": {
-            "revision": 75,
+            "revision": 101,
             "created": 1770688032449,
             "version": 0,
-            "updated": 1770816828888
+            "updated": 1781056899125
           },
           "$loki": 1
         },
@@ -158,36 +158,84 @@
       "name": "users",
       "data": [
         {
-          "user_id": 2,
-          "username": "zls",
-          "nickname": "ZLS",
-          "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoyLCJ1c2VybmFtZSI6InpscyIsImV4cCI6MTc3MDkwMzIyOSwiaWF0IjoxNzcwODE2ODI5LCJqdGkiOiJTNVVmdVcwOE9YWHpobXVPMzhveTdBIn0.lwgI1nUWvxrpo02hqaCWsyQ_n7qk0daJrS2Uh9Aq02M",
+          "user_id": 1,
+          "username": "lwr",
+          "nickname": "LWR",
+          "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxLCJ1c2VybmFtZSI6Imx3ciIsImV4cCI6MTc4MDkyNzc1NiwiaWF0IjoxNzgwODQxMzU2LCJqdGkiOiJXNENKdEVEVkhMbHRvVjhxRG9DdERRIn0.fjqY77MpLe32jJBDkeKPPR3h2ahh4Ow43V7MIRyyksg",
           "expires_in": 86400,
           "user_info": {
-            "avatar": "http://182.92.128.249:8766/avatar/2",
-            "department": "设计部",
+            "avatar": "http://127.0.0.1:8080/avatar/1",
+            "department": "技术部",
             "status": "online",
-            "last_seen": 1770816829
+            "last_seen": 1780841356
           },
           "code": 200,
           "meta": {
-            "revision": 69,
+            "revision": 77,
             "created": 1770695170618,
             "version": 0,
-            "updated": 1770816828940
+            "updated": 1780841356542
           },
           "$loki": 1
+        },
+        {
+          "user_id": 1,
+          "username": "lwr",
+          "nickname": "LWR",
+          "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxLCJ1c2VybmFtZSI6Imx3ciIsImV4cCI6MTc4MTE0MzI5OSwiaWF0IjoxNzgxMDU2ODk5LCJqdGkiOiJYQXluemE2T1p6eFcwQkZ5T29mbWR3In0.cUejr-kP84CuuUdff9gfxfP1WLAH0LHVgkxcV0xy1Nk",
+          "expires_in": 86400,
+          "user_info": {
+            "avatar": "http://127.0.0.1:8080/avatar/1",
+            "department": "技术部",
+            "status": "online",
+            "last_seen": 1781056899
+          },
+          "code": 200,
+          "id": 1,
+          "meta": {
+            "revision": 6,
+            "created": 1780916448683,
+            "version": 0,
+            "updated": 1781056899230
+          },
+          "$loki": 2
+        },
+        {
+          "user_id": 2,
+          "username": "zls",
+          "nickname": "ZLS",
+          "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoyLCJ1c2VybmFtZSI6InpscyIsImV4cCI6MTc4MTA5OTYxMCwiaWF0IjoxNzgxMDEzMjEwLCJqdGkiOiJOakg1MWFqS2dyNEhxQl9vNkY2VExBIn0.keG6NhV1PznEDyb6t9ZKGWFWA9SJIUpCZqmt-MdaEQc",
+          "expires_in": 86400,
+          "user_info": {
+            "avatar": "http://127.0.0.1:8080/avatar/2",
+            "department": "设计部",
+            "status": "online",
+            "last_seen": 1781013210
+          },
+          "code": 200,
+          "id": 2,
+          "meta": {
+            "revision": 3,
+            "created": 1780919315233,
+            "version": 0,
+            "updated": 1781013210403
+          },
+          "$loki": 3
         }
       ],
       "idIndex": [
-        1
+        1,
+        2,
+        3
       ],
       "binaryIndices": {
         "id": {
           "name": "id",
           "dirty": false,
           "values": [
-            0
+            0,
+            1,
+            2
           ]
         }
       },
@@ -213,7 +261,7 @@
       "serializableIndices": true,
       "disableFreeze": true,
       "ttl": null,
-      "maxId": 1,
+      "maxId": 3,
       "DynamicViews": [],
       "events": {
         "insert": [],
@@ -539,6 +587,518 @@
             "version": 0
           },
           "$loki": 19
+        },
+        {
+          "message_id": "e8605d90-5572-468a-a8b7-ad8e5d0a2a44",
+          "sender_id": 1,
+          "receiver_id": 2,
+          "content": {
+            "text": "6"
+          },
+          "timestamp": 1780841461,
+          "type": "text",
+          "conversation_id": "conv_1_2",
+          "meta": {
+            "revision": 0,
+            "created": 1780916456967,
+            "version": 0
+          },
+          "$loki": 20
+        },
+        {
+          "message_id": "e8605d90-5572-468a-a8b7-ad8e5d0a2a44",
+          "sender_id": 1,
+          "receiver_id": 2,
+          "content": {
+            "text": "6"
+          },
+          "timestamp": 1780841461,
+          "type": "text",
+          "conversation_id": "conv_1_2",
+          "meta": {
+            "revision": 0,
+            "created": 1780916480818,
+            "version": 0
+          },
+          "$loki": 21
+        },
+        {
+          "message_id": "e8605d90-5572-468a-a8b7-ad8e5d0a2a44",
+          "sender_id": 1,
+          "receiver_id": 2,
+          "content": {
+            "text": "6"
+          },
+          "timestamp": 1780841461,
+          "type": "text",
+          "conversation_id": "conv_1_2",
+          "meta": {
+            "revision": 0,
+            "created": 1780916481960,
+            "version": 0
+          },
+          "$loki": 22
+        },
+        {
+          "message_id": "e8605d90-5572-468a-a8b7-ad8e5d0a2a44",
+          "sender_id": 1,
+          "receiver_id": 2,
+          "content": {
+            "text": "6"
+          },
+          "timestamp": 1780841461,
+          "type": "text",
+          "conversation_id": "conv_1_2",
+          "meta": {
+            "revision": 0,
+            "created": 1780916602008,
+            "version": 0
+          },
+          "$loki": 23
+        },
+        {
+          "message_id": "e8605d90-5572-468a-a8b7-ad8e5d0a2a44",
+          "sender_id": 1,
+          "receiver_id": 2,
+          "content": {
+            "text": "6"
+          },
+          "timestamp": 1780841461,
+          "type": "text",
+          "conversation_id": "conv_1_2",
+          "meta": {
+            "revision": 0,
+            "created": 1780916630737,
+            "version": 0
+          },
+          "$loki": 24
+        },
+        {
+          "message_id": "e8605d90-5572-468a-a8b7-ad8e5d0a2a44",
+          "sender_id": 1,
+          "receiver_id": 2,
+          "content": {
+            "text": "6"
+          },
+          "timestamp": 1780841461,
+          "type": "text",
+          "conversation_id": "conv_1_2",
+          "meta": {
+            "revision": 0,
+            "created": 1780919281355,
+            "version": 0
+          },
+          "$loki": 25
+        },
+        {
+          "message_id": "e8605d90-5572-468a-a8b7-ad8e5d0a2a44",
+          "sender_id": 1,
+          "receiver_id": 2,
+          "content": {
+            "text": "6"
+          },
+          "timestamp": 1780841461,
+          "type": "text",
+          "conversation_id": "conv_1_2",
+          "meta": {
+            "revision": 0,
+            "created": 1780919318277,
+            "version": 0
+          },
+          "$loki": 26
+        },
+        {
+          "message_id": "8916c0ce-b0bb-4b73-8de4-ed20c2c1ca5e",
+          "sender_id": 1,
+          "receiver_id": 2,
+          "content": {
+            "text": "11111"
+          },
+          "timestamp": 1780919285,
+          "type": "text",
+          "conversation_id": "conv_1_2",
+          "meta": {
+            "revision": 0,
+            "created": 1780919318277,
+            "version": 0
+          },
+          "$loki": 27
+        },
+        {
+          "message_id": "e8605d90-5572-468a-a8b7-ad8e5d0a2a44",
+          "sender_id": 1,
+          "receiver_id": 2,
+          "content": {
+            "text": "6"
+          },
+          "timestamp": 1780841461,
+          "type": "text",
+          "conversation_id": "conv_1_2",
+          "meta": {
+            "revision": 0,
+            "created": 1780919864969,
+            "version": 0
+          },
+          "$loki": 28
+        },
+        {
+          "message_id": "8916c0ce-b0bb-4b73-8de4-ed20c2c1ca5e",
+          "sender_id": 1,
+          "receiver_id": 2,
+          "content": {
+            "text": "11111"
+          },
+          "timestamp": 1780919285,
+          "type": "text",
+          "conversation_id": "conv_1_2",
+          "meta": {
+            "revision": 0,
+            "created": 1780919864970,
+            "version": 0
+          },
+          "$loki": 29
+        },
+        {
+          "message_id": "e8605d90-5572-468a-a8b7-ad8e5d0a2a44",
+          "sender_id": 1,
+          "receiver_id": 2,
+          "content": {
+            "text": "6"
+          },
+          "timestamp": 1780841461,
+          "type": "text",
+          "conversation_id": "conv_1_2",
+          "meta": {
+            "revision": 0,
+            "created": 1780919892475,
+            "version": 0
+          },
+          "$loki": 30
+        },
+        {
+          "message_id": "8916c0ce-b0bb-4b73-8de4-ed20c2c1ca5e",
+          "sender_id": 1,
+          "receiver_id": 2,
+          "content": {
+            "text": "11111"
+          },
+          "timestamp": 1780919285,
+          "type": "text",
+          "conversation_id": "conv_1_2",
+          "meta": {
+            "revision": 0,
+            "created": 1780919892475,
+            "version": 0
+          },
+          "$loki": 31
+        },
+        {
+          "message_id": "c12f7556-2a69-4cce-b6ac-8cc20243cbfc",
+          "sender_id": 2,
+          "receiver_id": 1,
+          "content": {
+            "text": "22222"
+          },
+          "timestamp": 1780919871,
+          "type": "text",
+          "conversation_id": "conv_1_2",
+          "meta": {
+            "revision": 0,
+            "created": 1780919892475,
+            "version": 0
+          },
+          "$loki": 32
+        },
+        {
+          "message_id": "e8605d90-5572-468a-a8b7-ad8e5d0a2a44",
+          "sender_id": 1,
+          "receiver_id": 2,
+          "content": {
+            "text": "6"
+          },
+          "timestamp": 1780841461,
+          "type": "text",
+          "conversation_id": "conv_1_2",
+          "meta": {
+            "revision": 0,
+            "created": 1780968950241,
+            "version": 0
+          },
+          "$loki": 33
+        },
+        {
+          "message_id": "8916c0ce-b0bb-4b73-8de4-ed20c2c1ca5e",
+          "sender_id": 1,
+          "receiver_id": 2,
+          "content": {
+            "text": "11111"
+          },
+          "timestamp": 1780919285,
+          "type": "text",
+          "conversation_id": "conv_1_2",
+          "meta": {
+            "revision": 0,
+            "created": 1780968950241,
+            "version": 0
+          },
+          "$loki": 34
+        },
+        {
+          "message_id": "c12f7556-2a69-4cce-b6ac-8cc20243cbfc",
+          "sender_id": 2,
+          "receiver_id": 1,
+          "content": {
+            "text": "22222"
+          },
+          "timestamp": 1780919871,
+          "type": "text",
+          "conversation_id": "conv_1_2",
+          "meta": {
+            "revision": 0,
+            "created": 1780968950241,
+            "version": 0
+          },
+          "$loki": 35
+        },
+        {
+          "message_id": "e8605d90-5572-468a-a8b7-ad8e5d0a2a44",
+          "sender_id": 1,
+          "receiver_id": 2,
+          "content": {
+            "text": "6"
+          },
+          "timestamp": 1780841461,
+          "type": "text",
+          "conversation_id": "conv_1_2",
+          "meta": {
+            "revision": 0,
+            "created": 1781013159158,
+            "version": 0
+          },
+          "$loki": 36
+        },
+        {
+          "message_id": "8916c0ce-b0bb-4b73-8de4-ed20c2c1ca5e",
+          "sender_id": 1,
+          "receiver_id": 2,
+          "content": {
+            "text": "11111"
+          },
+          "timestamp": 1780919285,
+          "type": "text",
+          "conversation_id": "conv_1_2",
+          "meta": {
+            "revision": 0,
+            "created": 1781013159158,
+            "version": 0
+          },
+          "$loki": 37
+        },
+        {
+          "message_id": "c12f7556-2a69-4cce-b6ac-8cc20243cbfc",
+          "sender_id": 2,
+          "receiver_id": 1,
+          "content": {
+            "text": "22222"
+          },
+          "timestamp": 1780919871,
+          "type": "text",
+          "conversation_id": "conv_1_2",
+          "meta": {
+            "revision": 0,
+            "created": 1781013159158,
+            "version": 0
+          },
+          "$loki": 38
+        },
+        {
+          "message_id": "78d7dfda-d44a-4c87-8cd4-d399244f333e",
+          "sender_id": 1,
+          "receiver_id": 2,
+          "content": {
+            "text": "66666666666666666"
+          },
+          "timestamp": 1780968957,
+          "type": "text",
+          "conversation_id": "conv_1_2",
+          "meta": {
+            "revision": 0,
+            "created": 1781013159159,
+            "version": 0
+          },
+          "$loki": 39
+        },
+        {
+          "message_id": "e8605d90-5572-468a-a8b7-ad8e5d0a2a44",
+          "sender_id": 1,
+          "receiver_id": 2,
+          "content": {
+            "text": "6"
+          },
+          "timestamp": 1780841461,
+          "type": "text",
+          "conversation_id": "conv_1_2",
+          "meta": {
+            "revision": 0,
+            "created": 1781013213075,
+            "version": 0
+          },
+          "$loki": 40
+        },
+        {
+          "message_id": "8916c0ce-b0bb-4b73-8de4-ed20c2c1ca5e",
+          "sender_id": 1,
+          "receiver_id": 2,
+          "content": {
+            "text": "11111"
+          },
+          "timestamp": 1780919285,
+          "type": "text",
+          "conversation_id": "conv_1_2",
+          "meta": {
+            "revision": 0,
+            "created": 1781013213075,
+            "version": 0
+          },
+          "$loki": 41
+        },
+        {
+          "message_id": "c12f7556-2a69-4cce-b6ac-8cc20243cbfc",
+          "sender_id": 2,
+          "receiver_id": 1,
+          "content": {
+            "text": "22222"
+          },
+          "timestamp": 1780919871,
+          "type": "text",
+          "conversation_id": "conv_1_2",
+          "meta": {
+            "revision": 0,
+            "created": 1781013213075,
+            "version": 0
+          },
+          "$loki": 42
+        },
+        {
+          "message_id": "78d7dfda-d44a-4c87-8cd4-d399244f333e",
+          "sender_id": 1,
+          "receiver_id": 2,
+          "content": {
+            "text": "66666666666666666"
+          },
+          "timestamp": 1780968957,
+          "type": "text",
+          "conversation_id": "conv_1_2",
+          "meta": {
+            "revision": 0,
+            "created": 1781013213075,
+            "version": 0
+          },
+          "$loki": 43
+        },
+        {
+          "message_id": "f9ef27cf-6811-4e3c-8f99-fe6dc8c85c38",
+          "sender_id": 1,
+          "receiver_id": 2,
+          "content": {
+            "pic_id": "8e4693cd-b0ac-44df-b128-52c5c5a78f51",
+            "type": "image"
+          },
+          "timestamp": 1781013169,
+          "type": "text",
+          "conversation_id": "conv_1_2",
+          "meta": {
+            "revision": 0,
+            "created": 1781013213075,
+            "version": 0
+          },
+          "$loki": 44
+        },
+        {
+          "message_id": "e8605d90-5572-468a-a8b7-ad8e5d0a2a44",
+          "sender_id": 1,
+          "receiver_id": 2,
+          "content": {
+            "text": "6"
+          },
+          "timestamp": 1780841461,
+          "type": "text",
+          "conversation_id": "conv_1_2",
+          "meta": {
+            "revision": 0,
+            "created": 1781056902057,
+            "version": 0
+          },
+          "$loki": 45
+        },
+        {
+          "message_id": "8916c0ce-b0bb-4b73-8de4-ed20c2c1ca5e",
+          "sender_id": 1,
+          "receiver_id": 2,
+          "content": {
+            "text": "11111"
+          },
+          "timestamp": 1780919285,
+          "type": "text",
+          "conversation_id": "conv_1_2",
+          "meta": {
+            "revision": 0,
+            "created": 1781056902057,
+            "version": 0
+          },
+          "$loki": 46
+        },
+        {
+          "message_id": "c12f7556-2a69-4cce-b6ac-8cc20243cbfc",
+          "sender_id": 2,
+          "receiver_id": 1,
+          "content": {
+            "text": "22222"
+          },
+          "timestamp": 1780919871,
+          "type": "text",
+          "conversation_id": "conv_1_2",
+          "meta": {
+            "revision": 0,
+            "created": 1781056902057,
+            "version": 0
+          },
+          "$loki": 47
+        },
+        {
+          "message_id": "78d7dfda-d44a-4c87-8cd4-d399244f333e",
+          "sender_id": 1,
+          "receiver_id": 2,
+          "content": {
+            "text": "66666666666666666"
+          },
+          "timestamp": 1780968957,
+          "type": "text",
+          "conversation_id": "conv_1_2",
+          "meta": {
+            "revision": 0,
+            "created": 1781056902057,
+            "version": 0
+          },
+          "$loki": 48
+        },
+        {
+          "message_id": "f9ef27cf-6811-4e3c-8f99-fe6dc8c85c38",
+          "sender_id": 1,
+          "receiver_id": 2,
+          "content": {
+            "pic_id": "8e4693cd-b0ac-44df-b128-52c5c5a78f51",
+            "type": "image"
+          },
+          "timestamp": 1781013169,
+          "type": "text",
+          "conversation_id": "conv_1_2",
+          "meta": {
+            "revision": 0,
+            "created": 1781056902057,
+            "version": 0
+          },
+          "$loki": 49
         }
       ],
       "idIndex": null,
@@ -547,6 +1107,36 @@
           "name": "id",
           "dirty": false,
           "values": [
+            48,
+            47,
+            46,
+            45,
+            44,
+            43,
+            42,
+            41,
+            40,
+            39,
+            38,
+            37,
+            36,
+            35,
+            34,
+            33,
+            32,
+            31,
+            30,
+            29,
+            28,
+            27,
+            26,
+            25,
+            24,
+            23,
+            22,
+            21,
+            20,
+            19,
             18,
             17,
             16,
@@ -572,6 +1162,31 @@
           "name": "sender_id",
           "dirty": false,
           "values": [
+            48,
+            47,
+            45,
+            44,
+            43,
+            42,
+            40,
+            39,
+            38,
+            36,
+            35,
+            33,
+            32,
+            30,
+            29,
+            28,
+            27,
+            26,
+            25,
+            24,
+            23,
+            22,
+            21,
+            20,
+            19,
             18,
             17,
             16,
@@ -590,7 +1205,12 @@
             3,
             2,
             1,
-            0
+            0,
+            46,
+            41,
+            37,
+            34,
+            31
           ]
         },
         "receiver_id": {
@@ -615,7 +1235,37 @@
             3,
             2,
             1,
-            0
+            0,
+            46,
+            41,
+            37,
+            34,
+            31,
+            48,
+            47,
+            45,
+            44,
+            43,
+            42,
+            40,
+            39,
+            38,
+            36,
+            35,
+            33,
+            32,
+            30,
+            29,
+            28,
+            27,
+            26,
+            25,
+            24,
+            23,
+            22,
+            21,
+            20,
+            19
           ]
         },
         "timestamp": {
@@ -640,13 +1290,73 @@
             15,
             16,
             17,
-            18
+            18,
+            44,
+            39,
+            35,
+            32,
+            29,
+            27,
+            25,
+            24,
+            23,
+            22,
+            21,
+            20,
+            19,
+            45,
+            40,
+            36,
+            33,
+            30,
+            28,
+            26,
+            46,
+            41,
+            37,
+            34,
+            31,
+            47,
+            42,
+            38,
+            48,
+            43
           ]
         },
         "conversation_id": {
           "name": "conversation_id",
           "dirty": false,
           "values": [
+            48,
+            47,
+            46,
+            45,
+            44,
+            43,
+            42,
+            41,
+            40,
+            39,
+            38,
+            37,
+            36,
+            35,
+            34,
+            33,
+            32,
+            31,
+            30,
+            29,
+            28,
+            27,
+            26,
+            25,
+            24,
+            23,
+            22,
+            21,
+            20,
+            19,
             18,
             17,
             16,
@@ -689,7 +1399,7 @@
       "serializableIndices": true,
       "disableFreeze": true,
       "ttl": null,
-      "maxId": 19,
+      "maxId": 49,
       "DynamicViews": [],
       "events": {
         "insert": [],
@@ -756,6 +1466,230 @@
             "version": 0
           },
           "$loki": 3
+        },
+        {
+          "message_id": "3f01f829-27c8-4c79-b3db-b464bbe8d3ce",
+          "group_id": "g_27f46b15",
+          "sender_id": 2,
+          "content": {
+            "text": "111"
+          },
+          "timestamp": 1780919934,
+          "type": "text",
+          "meta": {
+            "revision": 0,
+            "created": 1780919937024,
+            "version": 0
+          },
+          "$loki": 4
+        },
+        {
+          "message_id": "3f01f829-27c8-4c79-b3db-b464bbe8d3ce",
+          "group_id": "g_27f46b15",
+          "sender_id": 2,
+          "content": {
+            "text": "111"
+          },
+          "timestamp": 1780919934,
+          "type": "text",
+          "meta": {
+            "revision": 0,
+            "created": 1780968966892,
+            "version": 0
+          },
+          "$loki": 5
+        },
+        {
+          "message_id": "3f01f829-27c8-4c79-b3db-b464bbe8d3ce",
+          "group_id": "g_27f46b15",
+          "sender_id": 2,
+          "content": {
+            "text": "111"
+          },
+          "timestamp": 1780919934,
+          "type": "text",
+          "meta": {
+            "revision": 0,
+            "created": 1780968983321,
+            "version": 0
+          },
+          "$loki": 6
+        },
+        {
+          "message_id": "d12ed569-c97b-4863-b0cb-5ba663fb3c43",
+          "group_id": "g_27f46b15",
+          "sender_id": 1,
+          "content": {
+            "text": "山"
+          },
+          "timestamp": 1780968970,
+          "type": "text",
+          "meta": {
+            "revision": 0,
+            "created": 1780968983321,
+            "version": 0
+          },
+          "$loki": 7
+        },
+        {
+          "message_id": "233baf28-4dce-4fd1-a649-915246be5e94",
+          "group_id": "g_27f46b15",
+          "sender_id": 1,
+          "content": {
+            "text": "山！"
+          },
+          "timestamp": 1780968974,
+          "type": "text",
+          "meta": {
+            "revision": 0,
+            "created": 1780968983321,
+            "version": 0
+          },
+          "$loki": 8
+        },
+        {
+          "message_id": "3f01f829-27c8-4c79-b3db-b464bbe8d3ce",
+          "group_id": "g_27f46b15",
+          "sender_id": 2,
+          "content": {
+            "text": "111"
+          },
+          "timestamp": 1780919934,
+          "type": "text",
+          "meta": {
+            "revision": 0,
+            "created": 1780968992090,
+            "version": 0
+          },
+          "$loki": 9
+        },
+        {
+          "message_id": "d12ed569-c97b-4863-b0cb-5ba663fb3c43",
+          "group_id": "g_27f46b15",
+          "sender_id": 1,
+          "content": {
+            "text": "山"
+          },
+          "timestamp": 1780968970,
+          "type": "text",
+          "meta": {
+            "revision": 0,
+            "created": 1780968992090,
+            "version": 0
+          },
+          "$loki": 10
+        },
+        {
+          "message_id": "233baf28-4dce-4fd1-a649-915246be5e94",
+          "group_id": "g_27f46b15",
+          "sender_id": 1,
+          "content": {
+            "text": "山！"
+          },
+          "timestamp": 1780968974,
+          "type": "text",
+          "meta": {
+            "revision": 0,
+            "created": 1780968992090,
+            "version": 0
+          },
+          "$loki": 11
+        },
+        {
+          "message_id": "3f01f829-27c8-4c79-b3db-b464bbe8d3ce",
+          "group_id": "g_27f46b15",
+          "sender_id": 2,
+          "content": {
+            "text": "111"
+          },
+          "timestamp": 1780919934,
+          "type": "text",
+          "meta": {
+            "revision": 0,
+            "created": 1780969573188,
+            "version": 0
+          },
+          "$loki": 12
+        },
+        {
+          "message_id": "d12ed569-c97b-4863-b0cb-5ba663fb3c43",
+          "group_id": "g_27f46b15",
+          "sender_id": 1,
+          "content": {
+            "text": "山"
+          },
+          "timestamp": 1780968970,
+          "type": "text",
+          "meta": {
+            "revision": 0,
+            "created": 1780969573188,
+            "version": 0
+          },
+          "$loki": 13
+        },
+        {
+          "message_id": "233baf28-4dce-4fd1-a649-915246be5e94",
+          "group_id": "g_27f46b15",
+          "sender_id": 1,
+          "content": {
+            "text": "山！"
+          },
+          "timestamp": 1780968974,
+          "type": "text",
+          "meta": {
+            "revision": 0,
+            "created": 1780969573188,
+            "version": 0
+          },
+          "$loki": 14
+        },
+        {
+          "message_id": "3f01f829-27c8-4c79-b3db-b464bbe8d3ce",
+          "group_id": "g_27f46b15",
+          "sender_id": 2,
+          "content": {
+            "text": "111"
+          },
+          "timestamp": 1780919934,
+          "type": "text",
+          "meta": {
+            "revision": 0,
+            "created": 1781013620225,
+            "version": 0
+          },
+          "$loki": 15
+        },
+        {
+          "message_id": "d12ed569-c97b-4863-b0cb-5ba663fb3c43",
+          "group_id": "g_27f46b15",
+          "sender_id": 1,
+          "content": {
+            "text": "山"
+          },
+          "timestamp": 1780968970,
+          "type": "text",
+          "meta": {
+            "revision": 0,
+            "created": 1781013620225,
+            "version": 0
+          },
+          "$loki": 16
+        },
+        {
+          "message_id": "233baf28-4dce-4fd1-a649-915246be5e94",
+          "group_id": "g_27f46b15",
+          "sender_id": 1,
+          "content": {
+            "text": "山！"
+          },
+          "timestamp": 1780968974,
+          "type": "text",
+          "meta": {
+            "revision": 0,
+            "created": 1781013620225,
+            "version": 0
+          },
+          "$loki": 17
         }
       ],
       "idIndex": null,
@@ -764,6 +1698,20 @@
           "name": "id",
           "dirty": false,
           "values": [
+            16,
+            15,
+            14,
+            13,
+            12,
+            11,
+            10,
+            9,
+            8,
+            7,
+            6,
+            5,
+            4,
+            3,
             2,
             1,
             0
@@ -775,13 +1723,41 @@
           "values": [
             2,
             1,
-            0
+            0,
+            16,
+            15,
+            14,
+            13,
+            12,
+            11,
+            10,
+            9,
+            8,
+            7,
+            6,
+            5,
+            4,
+            3
           ]
         },
         "sender_id": {
           "name": "sender_id",
           "dirty": false,
           "values": [
+            16,
+            15,
+            13,
+            12,
+            10,
+            9,
+            7,
+            6,
+            14,
+            11,
+            8,
+            5,
+            4,
+            3,
             2,
             1,
             0
@@ -793,7 +1769,21 @@
           "values": [
             0,
             1,
-            2
+            2,
+            14,
+            11,
+            8,
+            5,
+            4,
+            3,
+            15,
+            12,
+            9,
+            6,
+            16,
+            13,
+            10,
+            7
           ]
         }
       },
@@ -817,7 +1807,7 @@
       "serializableIndices": true,
       "disableFreeze": true,
       "ttl": null,
-      "maxId": 3,
+      "maxId": 17,
       "DynamicViews": [],
       "events": {
         "insert": [],
@@ -1094,7 +2084,7 @@
     "recursiveWait": true,
     "recursiveWaitLimit": false,
     "recursiveWaitLimitDuration": 2000,
-    "started": 1770816816726
+    "started": 1781056889342
   },
   "persistenceMethod": "fs",
   "persistenceAdapter": null,

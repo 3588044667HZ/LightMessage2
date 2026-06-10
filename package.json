@@ -4,13 +4,15 @@
   "description": "",
   "license": "ISC",
   "author": "",
-  "type": "commonjs",
   "main": "main.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "electron-forge start",
-    "package": "electron-forge package",
-    "make": "electron-forge make"
+    "dev": "vite",
+    "dev:electron": "concurrently -k \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "build": "vite build",
+    "preview": "vite preview",
+    "start": "electron .",
+    "package": "npm run build && electron-forge package",
+    "make": "npm run build && electron-forge make"
   },
   "devDependencies": {
     "@electron-forge/cli": "^7.11.1",
@@ -21,14 +23,17 @@
     "@electron-forge/plugin-auto-unpack-natives": "^7.11.1",
     "@electron-forge/plugin-fuses": "^7.11.1",
     "@electron/fuses": "^1.8.0",
-    "electron": "^40.2.1"
+    "@vitejs/plugin-vue": "^5.2.4",
+    "concurrently": "^9.1.2",
+    "electron": "^40.2.1",
+    "vite": "^6.3.5",
+    "wait-on": "^8.0.3"
   },
   "dependencies": {
     "electron-squirrel-startup": "^1.0.1",
-    "lokijs": "^1.5.12"
-  },
-  "files": [
-    "home",
-    "*.html"
-  ]
+    "lokijs": "^1.5.12",
+    "pinia": "^3.0.2",
+    "vue": "^3.5.16",
+    "vue-router": "^4.5.1"
+  }
 }
