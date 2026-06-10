@@ -6,7 +6,10 @@
       :class="['friend-item', { active: isActive(friend) }]"
       @click="chat.selectChat(friend.id, 'friend')"
     >
-      <span class="friend-name">{{ friend.nickname || friend.name }}</span>
+      <Avatar :id="friend.id" :name="friend.nickname || friend.name" :size="36" />
+      <div class="friend-info">
+        <span class="friend-name">{{ friend.nickname || friend.name }}</span>
+      </div>
       <span :class="['status-dot', friend.status]"></span>
     </div>
     <div v-if="chat.friends.length === 0" class="empty-hint">暂无好友</div>
@@ -15,6 +18,7 @@
 
 <script setup>
 import { useChatStore } from '@/stores/chat'
+import Avatar from './Avatar.vue'
 
 const chat = useChatStore()
 
@@ -34,8 +38,8 @@ function isActive(friend) {
 .friend-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 10px 16px;
+  gap: 12px;
+  padding: 8px 16px;
   cursor: pointer;
   transition: background 0.15s;
 }
@@ -48,9 +52,18 @@ function isActive(friend) {
   background: #d9ecff;
 }
 
+.friend-info {
+  flex: 1;
+  min-width: 0;
+}
+
 .friend-name {
   font-size: 14px;
   color: #303133;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
 }
 
 .status-dot {
@@ -58,6 +71,7 @@ function isActive(friend) {
   height: 8px;
   border-radius: 50%;
   background: #c0c4cc;
+  flex-shrink: 0;
 }
 
 .status-dot.online {

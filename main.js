@@ -787,6 +787,105 @@ const createWindow = () => {
             mainWindow.webContents.send("home:uploadGroupAvatarRes", {success: false, message: err.message});
         }
     });
+
+    // ===== 头像本地缓存 =====
+
+    // 缓存目录：{项目根}/data/avatars/friend/ 和 data/avatars/group/
+    const avatarBaseDir = path.join(__dirname, 'data', 'avatars');
+    const friendAvatarDir = path.join(avatarBaseDir, 'friend');
+    const groupAvatarDir = path.join(avatarBaseDir, 'group');
+    [friendAvatarDir, groupAvatarDir].forEach(dir => {
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    });
+
+    // MIME → 扩展名映射
+    const mimeToExt = {
+        'image/jpeg': '.jpg', 'image/jpg': '.jpg',
+        'image/png': '.png', 'image/webp': '.webp',
+        'image/gif': '.gif', 'image/bmp': '.bmp'
+    };
+    const allExts = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp'];
+
+    /**
+     * 获取头像（带本地文件缓存）
+     * 请求: { id: string|number, type: 'user' | 'group' }
+     * 响应: { success: true, data: 'data:image/png;base64,...', id, type }
+     *       { success: false, id, type }
+     */
+    ipcMain.on("home:getAvatar", async (event, data) => {
+        const { id, type } = data;
+        if (!id) {
+            mainWindow.webContents.send("home:getAvatarRes", { success: false, id, type });
+            return;
+        }
+
+        const cacheDir = type === 'group' ? groupAvatarDir : friendAvatarDir;
+        const baseName = String(id);
+
+        // 1. 磁盘缓存命中（尝试多种扩展名）
+        for (const ext of allExts) {
+            const filePath = path.join(cacheDir, `${baseName}${ext}`);
+            if (fs.existsSync(filePath)) {
+                try {
+                    const buffer = fs.readFileSync(filePath);
+                    const base64 = buffer.toString('base64');
+                    const mime = ext === '.png' ? 'image/png'
+                        : ext === '.webp' ? 'image/webp'
+                        : ext === '.gif' ? 'image/gif'
+                        : 'image/jpeg';
+                    mainWindow.webContents.send("home:getAvatarRes", {
+                        success: true,
+                        data: `data:${mime};base64,${base64}`,
+                        id, type
+                    });
+                    return;
+                } catch (err) {
+                    console.error("读取头像缓存失败:", err);
+                }
+            }
+        }
+
+        // 2. 从服务器下载
+        const url = type === 'group'
+            ? `http://127.0.0.1:8080/group/${id}`
+            : `http://127.0.0.1:8080/avatar/${id}`;
+
+        try {
+            const result = await new Promise((resolve, reject) => {
+                http.get(url, (res) => {
+                    if (res.statusCode !== 200) {
+                        reject(new Error(`HTTP ${res.statusCode}`));
+                        res.resume();
+                        return;
+                    }
+                    const contentType = res.headers['content-type'] || 'image/jpeg';
+                    const chunks = [];
+                    res.on('data', chunk => chunks.push(chunk));
+                    res.on('end', () => resolve({
+                        buffer: Buffer.concat(chunks),
+                        contentType
+                    }));
+                    res.on('error', reject);
+                }).on('error', reject);
+            });
+
+            // 确定扩展名并写入磁盘缓存
+            const ext = mimeToExt[result.contentType] || '.jpg';
+            const cachePath = path.join(cacheDir, `${baseName}${ext}`);
+            fs.writeFileSync(cachePath, result.buffer);
+            console.log(`头像已缓存: ${cachePath}`);
+
+            const base64 = result.buffer.toString('base64');
+            mainWindow.webContents.send("home:getAvatarRes", {
+                success: true,
+                data: `data:${result.contentType};base64,${base64}`,
+                id, type
+            });
+        } catch (err) {
+            console.error(`获取头像失败 (${type}:${id}):`, err.message);
+            mainWindow.webContents.send("home:getAvatarRes", { success: false, id, type });
+        }
+    });
 }
 
 app.whenReady().then(() => {

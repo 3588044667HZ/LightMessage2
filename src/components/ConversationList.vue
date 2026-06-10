@@ -7,10 +7,21 @@
       @click="chat.selectChat(conv.targetId, conv.type)"
     >
       <div class="conv-row">
-        <span class="conv-name">{{ conv.name }}</span>
-        <span class="conv-time">{{ formatTime(conv.timestamp) }}</span>
+        <Avatar
+          :id="conv.targetId"
+          :type="conv.type === 'group' ? 'group' : 'user'"
+          :name="conv.name"
+          :size="40"
+          class="conv-avatar"
+        />
+        <div class="conv-info">
+          <div class="conv-top">
+            <span class="conv-name">{{ conv.name }}</span>
+            <span class="conv-time">{{ formatTime(conv.timestamp) }}</span>
+          </div>
+          <span class="conv-preview">{{ conv.lastMessage }}</span>
+        </div>
       </div>
-      <span class="conv-preview">{{ conv.lastMessage }}</span>
     </div>
     <div v-if="conversations.length === 0" class="empty-hint">暂无会话</div>
   </div>
@@ -19,6 +30,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useChatStore } from '@/stores/chat'
+import Avatar from './Avatar.vue'
 
 const chat = useChatStore()
 
@@ -35,7 +47,6 @@ function formatTime(ts) {
   if (!ts) return ''
   const d = new Date(ts)
   const now = new Date()
-  // 同一天只显示时:分，否则显示月/日
   if (d.toDateString() === now.toDateString()) {
     return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
   }
@@ -49,9 +60,7 @@ function formatTime(ts) {
 }
 
 .conv-item {
-  display: flex;
-  flex-direction: column;
-  padding: 12px 16px;
+  padding: 10px 16px;
   cursor: pointer;
   transition: background 0.15s;
 }
@@ -66,6 +75,21 @@ function formatTime(ts) {
 
 .conv-row {
   display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.conv-avatar {
+  flex-shrink: 0;
+}
+
+.conv-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.conv-top {
+  display: flex;
   justify-content: space-between;
   align-items: center;
 }
@@ -74,11 +98,15 @@ function formatTime(ts) {
   font-size: 14px;
   font-weight: 500;
   color: #303133;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .conv-time {
   font-size: 11px;
   color: #c0c4cc;
+  flex-shrink: 0;
 }
 
 .conv-preview {
@@ -88,6 +116,7 @@ function formatTime(ts) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  display: block;
 }
 
 .empty-hint {
