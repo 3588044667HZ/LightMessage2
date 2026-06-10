@@ -243,18 +243,34 @@ const createWindow = () => {
             });
 
             ipcMain.on("home:sendMessage", (event, data) => {
+                // 构建 content：图片消息使用 pic_id，文本消息使用 text
+                const content = data.msgType === 'image'
+                    ? { pic_id: data.content, type: 'image' }
+                    : { text: data.content };
+
                 if (data.type === "group") {
                     Client.sendMessage("/group/message/send", {
-                        group_id: data.targetId, content: {"text": data.content}, client_msg_id: data.id
+                        group_id: data.targetId, content: content, client_msg_id: data.id,
+                        type: data.msgType === 'image' ? 'image' : 'text'
                     }).then(r => {
                         console.log("发送群消息：", data)
                     })
-
-
                 } else {
-                    Client.sendTextMessage(data.targetId, data.content, data.id);
+                    Client.sendMessage("/message/send", {
+                        receiver_id: data.targetId, content: content, client_msg_id: data.id,
+                        type: data.msgType === 'image' ? 'image' : 'text'
+                    });
                 }
             })
+
+            // 转发消息发送响应（用于获取 server message_id 以支持撤回）
+            Client.on("/message/send_response", (data) => {
+                console.log("/message/send_response", data);
+                if (data.message_id || data.server_msg_id) {
+                    main.webContents.send("home:MessageSendResponse", data);
+                }
+            });
+
             Client.on("/message/receive", (data) => {
                 main.webContents.send("home:MessageReceive", data)
                 console.log("/message/receive", data)
@@ -267,7 +283,7 @@ const createWindow = () => {
                         receiver_id: data.target_id,
                         content: data.content,
                         timestamp: data.timestamp,
-                        type: 'text'
+                        type: data.type || 'text'
                     });
                 } else if (data.target_type === 'group') {
                     // 群聊消息
@@ -410,6 +426,120 @@ const createWindow = () => {
                 });
             });
 
+            // ===== 图片上传与获取（WebSocket 协议） =====
+
+            // 上传图片：选择文件 → base64 → /upload_pic → 返回 pic_id
+            ipcMain.on("home:uploadImage", async (event) => {
+                try {
+                    const result = await dialog.showOpenDialog(main, {
+                        title: '选择图片',
+                        filters: [
+                            { name: '图片文件', extensions: ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp'] }
+                        ],
+                        properties: ['openFile']
+                    });
+
+                    if (result.canceled || result.filePaths.length === 0) {
+                        main.webContents.send("home:uploadImageRes", { success: false, message: '已取消' });
+                        return;
+                    }
+
+                    const filePath = result.filePaths[0];
+                    const stats = fs.statSync(filePath);
+
+                    // 10MB 限制（与协议一致）
+                    if (stats.size > 10 * 1024 * 1024) {
+                        main.webContents.send("home:uploadImageRes", { success: false, message: '图片大小超过 10MB 限制' });
+                        return;
+                    }
+
+                    // 读取文件并转为 base64
+                    const fileBuffer = fs.readFileSync(filePath);
+                    const base64Data = fileBuffer.toString('base64');
+
+                    // 确定 MIME 类型
+                    const ext = path.extname(filePath).toLowerCase();
+                    const mimeMap = {
+                        '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+                        '.png': 'image/png', '.webp': 'image/webp',
+                        '.gif': 'image/gif', '.bmp': 'image/bmp'
+                    };
+                    const contentType = mimeMap[ext] || 'image/png';
+
+                    // 通过 WebSocket 发送 /upload_pic
+                    delete Client.onceHandlers["/upload_pic_response"];
+
+                    Client.sendMessage("/upload_pic", {
+                        data: base64Data,
+                        content_type: contentType
+                    }).then(() => {
+                        console.log("图片上传请求已发送, 大小:", stats.size);
+                    }).catch(err => {
+                        console.error("图片上传请求失败:", err);
+                        main.webContents.send("home:uploadImageRes", { success: false, message: err.message });
+                    });
+
+                    Client.once("/upload_pic_response", (responseData) => {
+                        console.log("图片上传响应:", responseData);
+                        if (responseData.pic_id) {
+                            main.webContents.send("home:uploadImageRes", {
+                                success: true,
+                                pic_id: responseData.pic_id,
+                                size: responseData.size,
+                                content_type: responseData.content_type
+                            });
+                        } else {
+                            main.webContents.send("home:uploadImageRes", {
+                                success: false,
+                                message: responseData.message || '上传失败'
+                            });
+                        }
+                    });
+
+                } catch (err) {
+                    console.error("图片上传处理失败:", err);
+                    main.webContents.send("home:uploadImageRes", { success: false, message: err.message });
+                }
+            });
+
+            // 获取图片：通过 pic_id 从服务器拉取图片 base64 数据
+            ipcMain.on("home:getImage", (event, data) => {
+                const { pic_id } = data;
+                if (!pic_id) {
+                    main.webContents.send("home:getImageRes", { success: false, message: '缺少 pic_id', pic_id });
+                    return;
+                }
+
+                delete Client.onceHandlers["/get_pic_response"];
+
+                Client.sendMessage("/get_pic", {
+                    pic_id: pic_id
+                }).then(() => {
+                    console.log("获取图片请求已发送:", pic_id);
+                }).catch(err => {
+                    console.error("获取图片请求失败:", err);
+                    main.webContents.send("home:getImageRes", { success: false, message: err.message, pic_id });
+                });
+
+                Client.once("/get_pic_response", (responseData) => {
+                    if (responseData.data) {
+                        main.webContents.send("home:getImageRes", {
+                            success: true,
+                            pic_id: responseData.pic_id || pic_id,
+                            data: responseData.data,
+                            content_type: responseData.content_type || 'image/png',
+                            size: responseData.size
+                        });
+                    } else {
+                        main.webContents.send("home:getImageRes", {
+                            success: false,
+                            message: responseData.message || '图片不存在',
+                            pic_id
+                        });
+                    }
+                });
+            });
+
             // 群组通知接收（服务端推送）
             Client.on("/group/notification", (data) => {
                 console.log("/group/notification", data);
@@ -420,6 +550,87 @@ const createWindow = () => {
             Client.on("/group/invitation_received", (data) => {
                 console.log("/group/invitation_received", data);
                 main.webContents.send("home:groupInvitation", data);
+            });
+
+            // ===== 好友申请与通知 =====
+
+            // 发送好友申请
+            ipcMain.on("home:sendFriendRequest", (event, data) => {
+                console.log("home:sendFriendRequest", data);
+                delete Client.onceHandlers["/friend_request_response"];
+                Client.sendMessage("/friend_request", {
+                    id: Number(data.id),
+                    reason: data.reason || ''
+                }).then(() => {
+                    console.log("好友申请请求已发送");
+                }).catch(err => {
+                    console.error("好友申请请求失败:", err);
+                    main.webContents.send("home:sendFriendRequestRes", { success: false, message: err.message });
+                });
+                Client.once("/friend_request_response", (responseData) => {
+                    console.log("好友申请响应:", responseData);
+                    main.webContents.send("home:sendFriendRequestRes", responseData);
+                });
+            });
+
+            // 响应好友申请（同意/拒绝）
+            ipcMain.on("home:respondFriendRequest", (event, data) => {
+                console.log("home:respondFriendRequest", data);
+                delete Client.onceHandlers["/friend_request_resp_response"];
+                Client.sendMessage("/friend_request_resp", {
+                    invitation_id: data.invitationId,
+                    accept: data.accept,
+                    reason: data.reason || ''
+                }).then(() => {
+                    console.log("好友申请响应请求已发送");
+                }).catch(err => {
+                    console.error("好友申请响应请求失败:", err);
+                    main.webContents.send("home:respondFriendRequestRes", { success: false, message: err.message });
+                });
+                Client.once("/friend_request_resp_response", (responseData) => {
+                    console.log("好友申请响应结果:", responseData);
+                    main.webContents.send("home:respondFriendRequestRes", responseData);
+                });
+            });
+
+            // 接收好友申请通知（服务端推送给目标用户）
+            Client.on("/friend_request/receive", (data) => {
+                console.log("/friend_request/receive", data);
+                main.webContents.send("home:friendRequestReceive", data);
+            });
+
+            // 接收好友申请拒绝通知（服务端推送给申请者）
+            Client.on("/friend_request_reject", (data) => {
+                console.log("/friend_request_reject", data);
+                main.webContents.send("home:friendRequestReject", data);
+            });
+
+            // ===== 消息撤回 =====
+
+            // 撤回消息请求
+            ipcMain.on("home:recallMessage", (event, data) => {
+                console.log("home:recallMessage", data);
+                delete Client.onceHandlers["/recall_msg_response"];
+                Client.sendMessage("/recall_msg", {
+                    msg_id: data.msgId,
+                    type: data.msgType,       // "group" | "private"
+                    session_id: data.sessionId
+                }).then(() => {
+                    console.log("撤回请求已发送");
+                }).catch(err => {
+                    console.error("撤回请求失败:", err);
+                    main.webContents.send("home:recallMessageRes", { success: false, message: err.message });
+                });
+                Client.once("/recall_msg_response", (responseData) => {
+                    console.log("撤回响应:", responseData);
+                    main.webContents.send("home:recallMessageRes", responseData);
+                });
+            });
+
+            // 撤回事件推送（服务端推送给相关在线用户）
+            Client.on("/recall_msg_event", (data) => {
+                console.log("/recall_msg_event", data);
+                main.webContents.send("home:recallMsgEvent", data);
             });
 
             // ===== 头像上传 =====
