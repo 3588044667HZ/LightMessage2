@@ -6,7 +6,10 @@
       :class="['conv-item', { active: isActive(conv) }]"
       @click="chat.selectChat(conv.targetId, conv.type)"
     >
-      <span class="conv-name">{{ conv.name }}</span>
+      <div class="conv-row">
+        <span class="conv-name">{{ conv.name }}</span>
+        <span class="conv-time">{{ formatTime(conv.timestamp) }}</span>
+      </div>
       <span class="conv-preview">{{ conv.lastMessage }}</span>
     </div>
     <div v-if="conversations.length === 0" class="empty-hint">暂无会话</div>
@@ -26,6 +29,17 @@ function isActive(conv) {
     chat.currentChat?.type === conv.type &&
     String(chat.currentChat?.id) === String(conv.targetId)
   )
+}
+
+function formatTime(ts) {
+  if (!ts) return ''
+  const d = new Date(ts)
+  const now = new Date()
+  // 同一天只显示时:分，否则显示月/日
+  if (d.toDateString() === now.toDateString()) {
+    return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+  }
+  return `${d.getMonth() + 1}/${d.getDate()}`
 }
 </script>
 
@@ -50,16 +64,27 @@ function isActive(conv) {
   background: #d9ecff;
 }
 
+.conv-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 .conv-name {
   font-size: 14px;
   font-weight: 500;
   color: #303133;
 }
 
+.conv-time {
+  font-size: 11px;
+  color: #c0c4cc;
+}
+
 .conv-preview {
   font-size: 12px;
   color: #909399;
-  margin-top: 2px;
+  margin-top: 4px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

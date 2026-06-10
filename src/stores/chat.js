@@ -53,6 +53,22 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  /**
+   * 创建或更新会话条目
+   * 发送/收到消息时自动调用，保持会话列表与最新消息同步
+   */
+  function upsertConversation(type, targetId, name, lastMessage) {
+    const idx = conversations.value.findIndex(
+      c => c.type === type && String(c.targetId) === String(targetId)
+    )
+    const entry = { type, targetId, name, lastMessage, timestamp: Date.now() }
+    if (idx >= 0) {
+      conversations.value.splice(idx, 1, entry)
+    } else {
+      conversations.value.unshift(entry)
+    }
+  }
+
   function addNotification(notification) {
     notifications.value.unshift({
       id: Date.now(),
@@ -71,6 +87,6 @@ export const useChatStore = defineStore('chat', () => {
     friendsMap, groupsMap, chatHistory,
     unreadNotificationCount, currentMessages,
     selectChat, setFriends, setGroups,
-    appendMessage, addNotification, clearUnreadNotifications
+    appendMessage, upsertConversation, addNotification, clearUnreadNotifications
   }
 })

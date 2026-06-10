@@ -28,11 +28,16 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useChatStore } from '@/stores/chat'
+import { useAuthStore } from '@/stores/auth'
+import { useIpc } from '@/composables/useIpc'
 import MessageList from './MessageList.vue'
 
+const { ipcRenderer } = window.require('electron')
 const chat = useChatStore()
+const auth = useAuthStore()
+const ipc = useIpc()
 const inputText = ref('')
 
 const chatTitle = computed(() => {
@@ -42,18 +47,96 @@ const chatTitle = computed(() => {
   return chat.groupsMap[id]?.name || `群组${id}`
 })
 
+// 监听会话切换，自动加载历史消息
+ipc.on('home:LoadChatHistoryRes', (_event, messages) => {
+  const c = chat.currentChat
+  if (!c) return
+  console.log('[ChatWindow] 收到历史消息:', messages?.length, '条')
+  const key = `${c.type}_${c.id}`
+  // 清空该会话旧缓存，写入服务端返回的消息
+  chat.chatHistory[key] = { messages: [], lastMessageId: null }
+  for (const msg of (messages || [])) {
+    chat.appendMessage(c.type, c.id, {
+      message_id: msg.message_id,
+      sender_id: msg.sender_id,
+      content: msg.content,
+      timestamp: msg.timestamp,
+      type: msg.type || 'text'
+    })
+  }
+})
+
+// 监听实时消息推送（对方发来的消息 / 群消息）
+ipc.on('home:MessageReceive', (_event, data) => {
+  console.log('[ChatWindow] 收到实时消息:', data)
+  let chatType, chatId
+
+  if (data.target_type === 'group') {
+    chatType = 'group'
+    chatId = data.group_id || data.target_id
+  } else {
+    chatType = 'friend'
+    chatId = data.sender_id
+  }
+
+  // 忽略自己发出的回显（已在 sendMessage 中本地追加）
+  if (String(data.sender_id) === String(auth.userId)) return
+
+  chat.appendMessage(chatType, chatId, {
+    message_id: data.message_id,
+    sender_id: data.sender_id,
+    content: data.content,
+    timestamp: data.timestamp,
+    type: data.type || 'text'
+  })
+
+  // 更新会话列表（收到消息的对话置顶）
+  const name = chatType === 'group'
+    ? (chat.groupsMap[chatId]?.name || `群组${chatId}`)
+    : (chat.friendsMap[chatId]?.nickname || chat.friendsMap[chatId]?.name || `用户${chatId}`)
+  const preview = typeof data.content === 'string' ? data.content : (data.content?.text || '[图片]')
+  chat.upsertConversation(chatType, chatId, name, preview)
+})
+
+watch(
+  () => chat.currentChat,
+  (newChat) => {
+    if (!newChat) return
+    console.log('[ChatWindow] 切换会话，请求历史消息:', newChat)
+    ipcRenderer.send('home:loadChatHistory', {
+      type: newChat.type === 'group' ? 'group' : 'private',
+      targetId: newChat.id
+    })
+  },
+  { immediate: true }
+)
+
 function sendMessage() {
   const text = inputText.value.trim()
   if (!text || !chat.currentChat) return
 
-  // TODO: 通过 IPC 发送消息并追加到 chatHistory
+  const clientMsgId = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+
+  // 通过 IPC 发送到主进程 → WebSocket 服务器
+  ipcRenderer.send('home:sendMessage', {
+    type: chat.currentChat.type === 'group' ? 'group' : 'private',
+    targetId: chat.currentChat.id,
+    content: text,
+    id: clientMsgId,
+    msgType: 'text'
+  })
+
+  // 本地追加到 chatHistory（立即显示）
   chat.appendMessage(chat.currentChat.type, chat.currentChat.id, {
     message_id: null,
-    sender_id: 'me',
+    sender_id: auth.userId,
     content: text,
     timestamp: Date.now(),
     type: 'text'
   })
+
+  // 更新会话列表
+  chat.upsertConversation(chat.currentChat.type, chat.currentChat.id, chatTitle.value, text)
 
   inputText.value = ''
 }

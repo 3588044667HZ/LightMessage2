@@ -108,7 +108,8 @@ const createWindow = () => {
             Client.sendMessage("/contacts/list", {"category": "all/friends/colleagues"}).then(r => {
                 console.log("好友列表请求已发送。")
             })
-            Client.on("/contacts/list_response", (data) => {
+            delete Client.onceHandlers["/contacts/list_response"];
+            Client.once("/contacts/list_response", (data) => {
                 if (data.code === 200) {
                     console.log(data.contacts)
                     let friend_list = []
@@ -136,7 +137,8 @@ const createWindow = () => {
         Client.sendMessage("/group/list", {}).then(r => {
             console.log("群列表请求已发送")
         })
-        Client.on("/group/list_response", (data) => {
+        delete Client.onceHandlers["/group/list_response"];
+        Client.once("/group/list_response", (data) => {
             console.log("/group/list_response:data.groups", data.groups)
             let group_list = []
             for (const dataKey in data.groups) {

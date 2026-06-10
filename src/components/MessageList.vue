@@ -3,14 +3,14 @@
     <div
       v-for="(msg, idx) in chat.currentMessages"
       :key="msg.message_id || idx"
-      :class="['message-item', msg.sender_id === 'me' ? 'sent' : 'received']"
+      :class="['message-item', String(msg.sender_id) === String(auth.userId) ? 'sent' : 'received']"
       :data-message-id="msg.message_id || ''"
       :data-sender-id="msg.sender_id || ''"
       :data-timestamp="msg.timestamp || ''"
     >
       <!-- 撤回消息 -->
       <div v-if="msg.recalled" class="recall-notice">
-        {{ msg.sender_id === 'me' ? '你撤回了一条消息' : '对方撤回了一条消息' }}
+        {{ String(msg.sender_id) === String(auth.userId) ? '你撤回了一条消息' : '对方撤回了一条消息' }}
       </div>
 
       <!-- 普通消息 -->
@@ -30,8 +30,10 @@
 <script setup>
 import { ref, watch, nextTick } from 'vue'
 import { useChatStore } from '@/stores/chat'
+import { useAuthStore } from '@/stores/auth'
 
 const chat = useChatStore()
+const auth = useAuthStore()
 const listRef = ref(null)
 
 // 消息列表变化时自动滚动到底部
