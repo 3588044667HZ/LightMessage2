@@ -98,6 +98,55 @@ ipc.on('home:MessageReceive', (_event, data) => {
   chat.upsertConversation(chatType, chatId, name, preview)
 })
 
+// ===== 消息撤回 =====
+
+// 辅助函数：在指定会话中标记消息为已撤回
+function markMessageRecalled(type, targetId, msgId) {
+  const key = `${type}_${targetId}`
+  const history = chat.chatHistory[key]
+  if (!history) return false
+  const msg = history.messages.find(m => String(m.message_id) === String(msgId))
+  if (msg) {
+    msg.recalled = true
+    console.log(`[ChatWindow] 消息 ${msgId} 已标记为撤回`)
+    return true
+  }
+  return false
+}
+
+// 撤回响应（自己发起撤回后服务端的应答）
+ipc.on('home:recallMessageRes', (_event, data) => {
+  console.log('[ChatWindow] 撤回响应:', data)
+  if (data.success === false) {
+    console.warn('[ChatWindow] 撤回失败:', data.message)
+    return
+  }
+  const c = chat.currentChat
+  if (!c) return
+  // 响应中可能包含 msg_id / message_id
+  const msgId = data.msg_id || data.message_id
+  if (msgId) {
+    markMessageRecalled(c.type, c.id, msgId)
+  }
+})
+
+// 撤回事件推送（服务端推送，对方撤回消息时触发）
+ipc.on('home:recallMsgEvent', (_event, data) => {
+  console.log('[ChatWindow] 撤回推送:', data)
+  const msgId = data.msg_id || data.message_id
+  if (!msgId) return
+
+  // 根据推送中的会话信息定位消息
+  if (data.type === 'group' || data.target_type === 'group') {
+    const groupId = data.group_id || data.target_id || data.session_id
+    if (groupId) markMessageRecalled('group', groupId, msgId)
+  } else {
+    // 私聊：发送者就是对方
+    const senderId = data.sender_id || data.target_id || data.session_id
+    if (senderId) markMessageRecalled('friend', senderId, msgId)
+  }
+})
+
 watch(
   () => chat.currentChat,
   (newChat) => {
