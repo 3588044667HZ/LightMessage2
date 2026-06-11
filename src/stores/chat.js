@@ -81,12 +81,29 @@ export const useChatStore = defineStore('chat', () => {
     notifications.value.forEach(n => (n.read = true))
   }
 
+  /**
+   * 登出时重置所有状态，确保切换用户时不残留旧数据
+   */
+  function reset() {
+    conversations.value = []
+    friends.value = []
+    groups.value = []
+    notifications.value = []
+    currentChat.value = null
+    activeTab.value = 'conversations'
+    searchKeyword.value = ''
+    friendsMap.value = {}
+    groupsMap.value = {}
+    chatHistory.value = {}
+  }
+
   return {
     conversations, friends, groups, notifications,
     currentChat, activeTab, searchKeyword,
     friendsMap, groupsMap, chatHistory,
     unreadNotificationCount, currentMessages,
     selectChat, setFriends, setGroups,
-    appendMessage, upsertConversation, addNotification, clearUnreadNotifications
+    appendMessage, upsertConversation, addNotification, clearUnreadNotifications,
+    reset
   }
 })

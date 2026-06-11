@@ -9,12 +9,25 @@
     <!-- 聊天区域 -->
     <template v-else>
       <div class="chat-header">
+        <Avatar
+          :id="chat.currentChat.id"
+          :type="chat.currentChat.type === 'group' ? 'group' : 'user'"
+          :name="chatTitle"
+          :size="32"
+        />
         <span class="chat-title">{{ chatTitle }}</span>
       </div>
 
       <MessageList class="chat-messages" />
 
       <div class="chat-input-area">
+        <button class="img-btn" @click="selectImage" title="发送图片">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+            <circle cx="8.5" cy="8.5" r="1.5"/>
+            <polyline points="21 15 16 10 5 21"/>
+          </svg>
+        </button>
         <textarea
           v-model="inputText"
           class="chat-input"
@@ -28,11 +41,12 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { useChatStore } from '@/stores/chat'
 import { useAuthStore } from '@/stores/auth'
 import { useIpc } from '@/composables/useIpc'
 import MessageList from './MessageList.vue'
+import Avatar from './Avatar.vue'
 
 const { ipcRenderer } = window.require('electron')
 const chat = useChatStore()
@@ -47,21 +61,59 @@ const chatTitle = computed(() => {
   return chat.groupsMap[id]?.name || `群组${id}`
 })
 
-// 监听会话切换，自动加载历史消息
-ipc.on('home:LoadChatHistoryRes', (_event, messages) => {
+// ===== 聊天历史加载（本地 DB + 服务器回退） =====
+const loadingKeys = new Set()
+
+// 服务器历史消息响应（仅在本地 DB 无数据时触发）
+ipc.on('home:LoadChatHistoryRes', (_event, arg) => {
+  const messages = Array.isArray(arg) ? arg : (arg?.messages || [])
   const c = chat.currentChat
   if (!c) return
-  console.log('[ChatWindow] 收到历史消息:', messages?.length, '条')
   const key = `${c.type}_${c.id}`
-  // 清空该会话旧缓存，写入服务端返回的消息
+  loadingKeys.delete(key)
+  console.log('[ChatWindow] 服务器历史消息:', messages.length, '条')
   chat.chatHistory[key] = { messages: [], lastMessageId: null }
-  for (const msg of (messages || [])) {
+  for (const msg of messages) {
     chat.appendMessage(c.type, c.id, {
       message_id: msg.message_id,
       sender_id: msg.sender_id,
       content: msg.content,
       timestamp: msg.timestamp,
       type: msg.type || 'text'
+    })
+  }
+})
+
+// 本地数据库历史消息响应（第一优先级）
+ipc.on('home:LoadLocalChatHistoryRes', (_event, data) => {
+  const c = chat.currentChat
+  if (!c) return
+  const key = `${c.type}_${c.id}`
+  const loadingKey = `loading_${key}`
+  if (!loadingKeys.has(loadingKey)) return
+
+  if (data.messages && data.messages.length > 0) {
+    console.log('[ChatWindow] 命中本地 DB:', data.messages.length, '条')
+    loadingKeys.delete(loadingKey)
+    chat.chatHistory[key] = { messages: [], lastMessageId: null }
+    for (const msg of data.messages) {
+      chat.appendMessage(c.type, c.id, {
+        message_id: msg.message_id,
+        sender_id: msg.sender_id,
+        content: msg.content,
+        timestamp: msg.timestamp,
+        type: msg.type || 'text'
+      })
+    }
+  } else {
+    // 本地 DB 无数据，回退到服务器
+    console.log('[ChatWindow] 本地 DB 无数据，请求服务器历史:', key)
+    loadingKeys.delete(loadingKey)
+    loadingKeys.add(key)
+    ipcRenderer.send('home:loadChatHistory', {
+      type: c.type === 'group' ? 'group' : 'private',
+      targetId: c.id,
+      limit: 200
     })
   }
 })
@@ -94,7 +146,9 @@ ipc.on('home:MessageReceive', (_event, data) => {
   const name = chatType === 'group'
     ? (chat.groupsMap[chatId]?.name || `群组${chatId}`)
     : (chat.friendsMap[chatId]?.nickname || chat.friendsMap[chatId]?.name || `用户${chatId}`)
-  const preview = typeof data.content === 'string' ? data.content : (data.content?.text || '[图片]')
+  const preview = (data.type === 'image')
+    ? '[图片]'
+    : (typeof data.content === 'string' ? data.content : (data.content?.text || '[图片]'))
   chat.upsertConversation(chatType, chatId, name, preview)
 })
 
@@ -151,10 +205,26 @@ watch(
   () => chat.currentChat,
   (newChat) => {
     if (!newChat) return
-    console.log('[ChatWindow] 切换会话，请求历史消息:', newChat)
-    ipcRenderer.send('home:loadChatHistory', {
+
+    const key = `${newChat.type}_${newChat.id}`
+
+    // 优先级1：Pinia 内存缓存
+    const cached = chat.chatHistory[key]
+    if (cached && cached.messages.length > 0) {
+      console.log('[ChatWindow] 命中内存缓存，跳过加载:', key, cached.messages.length, '条')
+      return
+    }
+
+    // 防止重复请求（快速切换会话时）
+    if (loadingKeys.has(key) || loadingKeys.has(`loading_${key}`)) return
+
+    // 优先级2：本地数据库
+    console.log('[ChatWindow] 内存未命中，查询本地 DB:', key)
+    loadingKeys.add(`loading_${key}`)
+    ipcRenderer.send('home:loadLocalChatHistory', {
       type: newChat.type === 'group' ? 'group' : 'private',
-      targetId: newChat.id
+      targetId: newChat.id,
+      limit: 200
     })
   },
   { immediate: true }
@@ -178,10 +248,23 @@ function sendMessage() {
   // 本地追加到 chatHistory（立即显示）
   chat.appendMessage(chat.currentChat.type, chat.currentChat.id, {
     message_id: null,
+    localId: clientMsgId,
     sender_id: auth.userId,
     content: text,
     timestamp: Date.now(),
     type: 'text'
+  })
+
+  // 保存到本地数据库（去重将在服务端确认 message_id 后生效）
+  ipcRenderer.send('home:saveLocalMessage', {
+    type: chat.currentChat.type === 'group' ? 'group' : 'private',
+    targetId: chat.currentChat.id,
+    message_id: null,
+    localId: clientMsgId,
+    sender_id: auth.userId,
+    content: text,
+    timestamp: Date.now(),
+    msgType: 'text'
   })
 
   // 更新会话列表
@@ -189,6 +272,153 @@ function sendMessage() {
 
   inputText.value = ''
 }
+
+// ===== 图片发送（本地优先渲染 + 后台上传 + 状态追踪）=====
+
+// 监听服务端消息发送确认 → 更新 sendStatus + 本地 DB
+ipc.on('home:MessageSendResponse', (_event, data) => {
+  const clientMsgId = data.client_msg_id
+  const serverMsgId = data.message_id || data.server_msg_id
+  if (!clientMsgId || !serverMsgId) return
+
+  const c = chat.currentChat
+  if (!c) return
+  const key = `${c.type}_${c.id}`
+  const history = chat.chatHistory[key]
+  if (!history) return
+
+  const msg = history.messages.find(m => m.localId === clientMsgId)
+  if (msg) {
+    msg.message_id = serverMsgId
+    msg.sendStatus = 'sent'
+    console.log('[ChatWindow] 消息发送确认:', clientMsgId, '→', serverMsgId)
+
+    // 更新本地 DB 中该消息的 message_id
+    ipcRenderer.send('home:updateLocalMessageId', {
+      localId: clientMsgId,
+      messageId: serverMsgId,
+      type: c.type === 'group' ? 'group' : 'private',
+      targetId: c.id,
+      timestamp: msg.timestamp
+    })
+  }
+})
+
+function selectImage() {
+  if (!chat.currentChat) return
+  ipcRenderer.send('home:selectImage')
+}
+
+function onSelectImageRes(_event, data) {
+  if (!data.success) {
+    if (data.message !== '已取消') {
+      console.warn('[ChatWindow] 选择图片失败:', data.message)
+    }
+    return
+  }
+
+  const c = chat.currentChat
+  if (!c) return
+
+  // 生成本地唯一标识
+  const localId = `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+  const dataUrl = `data:${data.contentType};base64,${data.base64}`
+
+  // 立即追加到聊天列表（用户马上看到图片 + 发送中状态）
+  chat.appendMessage(c.type, c.id, {
+    message_id: null,
+    localId: localId,
+    sender_id: auth.userId,
+    content: { pic_id: localId, type: 'image' },
+    timestamp: Date.now(),
+    type: 'image',
+    sendStatus: 'sending'
+  })
+
+  // 将 base64 写入全局图片缓存，MessageList 可直接渲染
+  if (!window.__imageDataCache) window.__imageDataCache = {}
+  window.__imageDataCache[localId] = dataUrl
+
+  // 更新会话列表
+  chat.upsertConversation(c.type, c.id, chatTitle.value, '[图片]')
+
+  // 后台上传
+  ipcRenderer.send('home:uploadImage', {
+    base64: data.base64,
+    contentType: data.contentType,
+    localId: localId
+  })
+
+  // 2 分钟超时检测
+  setTimeout(() => {
+    const key = `${c.type}_${c.id}`
+    const history = chat.chatHistory[key]
+    if (!history) return
+    const msg = history.messages.find(m => m.localId === localId)
+    if (msg && msg.sendStatus === 'sending') {
+      msg.sendStatus = 'failed'
+      console.warn('[ChatWindow] 图片发送超时:', localId)
+    }
+  }, 2 * 60 * 1000)
+}
+
+// 监听上传结果 → 上传成功后自动发送消息
+function onUploadImageRes(_event, data) {
+  const localId = data.localId
+  if (!localId) return
+
+  if (!data.success) {
+    console.warn('[ChatWindow] 图片上传失败:', data.message)
+    // 标记为失败
+    for (const key in chat.chatHistory) {
+      const msg = chat.chatHistory[key].messages.find(m => m.localId === localId)
+      if (msg) { msg.sendStatus = 'failed'; break }
+    }
+    return
+  }
+
+  const c = chat.currentChat
+  if (!c) return
+
+  // 上传成功 → 发送消息
+  console.log('[ChatWindow] 图片上传成功，发送消息:', data.pic_id)
+  ipcRenderer.send('home:sendMessage', {
+    type: c.type === 'group' ? 'group' : 'private',
+    targetId: c.id,
+    content: data.pic_id,
+    id: localId,
+    msgType: 'image'
+  })
+
+  // 保存到本地数据库
+  ipcRenderer.send('home:saveLocalMessage', {
+    type: c.type === 'group' ? 'group' : 'private',
+    targetId: c.id,
+    message_id: null,
+    localId: localId,
+    sender_id: auth.userId,
+    content: { pic_id: data.pic_id, type: 'image' },
+    timestamp: Date.now(),
+    msgType: 'image'
+  })
+
+  // 更新消息 content 为真实 pic_id，但保留 localId 用于匹配 send_response
+  const key = `${c.type}_${c.id}`
+  const history = chat.chatHistory[key]
+  if (history) {
+    const msg = history.messages.find(m => m.localId === localId)
+    if (msg) {
+      msg.content = { pic_id: data.pic_id, type: 'image' }
+    }
+  }
+}
+
+ipcRenderer.on('home:selectImageRes', onSelectImageRes)
+ipcRenderer.on('home:uploadImageRes', onUploadImageRes)
+onUnmounted(() => {
+  ipcRenderer.removeListener('home:selectImageRes', onSelectImageRes)
+  ipcRenderer.removeListener('home:uploadImageRes', onUploadImageRes)
+})
 </script>
 
 <style scoped>
@@ -213,6 +443,9 @@ function sendMessage() {
 }
 
 .chat-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   padding: 14px 20px;
   border-bottom: 1px solid #e4e7ed;
   font-size: 15px;
@@ -231,6 +464,32 @@ function sendMessage() {
   gap: 10px;
   padding: 12px 20px;
   border-top: 1px solid #e4e7ed;
+  align-items: center;
+}
+
+.img-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 10px;
+  background: none;
+  border: 1px solid #dcdfe6;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #606266;
+  font-size: 13px;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.img-btn:hover {
+  color: #409eff;
+  border-color: #409eff;
+}
+
+.img-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .chat-input {

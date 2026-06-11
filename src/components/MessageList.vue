@@ -18,7 +18,27 @@
       <template v-else>
         <div class="message-bubble">
           <div v-if="msg.type === 'image'" class="message-image">
-            <span>[图片]</span>
+            <div class="msg-img-wrapper">
+              <img
+                v-if="hasImageSrc(msg)"
+                :src="getImageSrc(msg)"
+                class="msg-img"
+                :class="{ 'msg-img-sending': msg.sendStatus === 'sending' }"
+                @click="msg.sendStatus !== 'sending' && previewImage(getImageSrc(msg))"
+              />
+              <div v-else class="msg-img-placeholder">
+                <span>图片加载中...</span>
+              </div>
+              <!-- 发送中覆盖层 -->
+              <div v-if="msg.sendStatus === 'sending'" class="msg-status-overlay">
+                <div class="msg-status-spinner"></div>
+                <span>发送中</span>
+              </div>
+              <!-- 发送失败覆盖层 -->
+              <div v-if="msg.sendStatus === 'failed'" class="msg-status-overlay msg-status-failed">
+                <span>发送失败</span>
+              </div>
+            </div>
           </div>
           <div v-else class="message-text">{{ getContentText(msg.content) }}</div>
           <div class="message-time">{{ formatTime(msg.timestamp) }}</div>
@@ -36,6 +56,13 @@
         <div class="context-menu-item" @click="recallMessage">撤回消息</div>
       </div>
     </Teleport>
+
+    <!-- 图片预览弹窗 -->
+    <Teleport to="body">
+      <div v-if="previewSrc" class="image-preview-overlay" @click="previewSrc = null">
+        <img :src="previewSrc" class="image-preview-img" />
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -48,6 +75,75 @@ const {ipcRenderer} = window.require('electron')
 const chat = useChatStore()
 const auth = useAuthStore()
 const listRef = ref(null)
+
+// ---- 图片消息渲染 ----
+// 全局图片缓存：组件销毁后数据不丢失，重新挂载时可直接读取
+if (!window.__imageDataCache) window.__imageDataCache = {}
+const imageDataMap = reactive(window.__imageDataCache)
+const imageLoading = new Set()      // 正在加载中的 pic_id
+const previewSrc = ref(null)        // 图片预览
+
+function getPicId(content) {
+  if (!content) return ''
+  if (typeof content === 'string') return String(content)
+  return String(content.pic_id || '')
+}
+
+// 获取图片显示 ID：优先 localId（发送中的本地图），否则取 content 中的 pic_id
+function getImageDisplayId(msg) {
+  if (msg.localId && typeof msg.localId === 'string' && msg.localId.startsWith('local_')) {
+    return msg.localId
+  }
+  return getPicId(msg.content)
+}
+
+function hasImageSrc(msg) {
+  const id = getImageDisplayId(msg)
+  return id && !!imageDataMap[id]
+}
+
+function getImageSrc(msg) {
+  const id = getImageDisplayId(msg)
+  return id ? imageDataMap[id] || '' : ''
+}
+
+function previewImage(src) {
+  previewSrc.value = src
+}
+
+// 从 content 中提取所有图片消息的 pic_id 并请求加载
+function loadImageMessages(messages) {
+  for (const msg of messages) {
+    if (msg.type !== 'image') continue
+    const displayId = getImageDisplayId(msg)
+
+    // 本地缓存已有的图片不需要从服务器拉取
+    if (!displayId || imageDataMap[displayId] || imageLoading.has(displayId)) continue
+    if (displayId.startsWith('local_')) continue // 本地发送中的图片已有 base64
+
+    imageLoading.add(displayId)
+    ipcRenderer.send('home:getImage', { pic_id: displayId })
+  }
+}
+
+// 全局图片响应监听器
+function onGetImageRes(_event, data) {
+  const picId = String(data.pic_id || '')
+  if (!picId) return
+  imageLoading.delete(picId)
+
+  if (data.success && data.data) {
+    const ct = data.content_type || 'image/png'
+    imageDataMap[picId] = `data:${ct};base64,${data.data}`
+  } else {
+    console.warn('[MessageList] 获取图片失败:', picId, data.message)
+  }
+}
+
+ipcRenderer.on('home:getImageRes', onGetImageRes)
+onUnmounted(() => {
+  ipcRenderer.removeListener('home:getImageRes', onGetImageRes)
+})
 
 // ---- 右键上下文菜单 ----
 const contextMenu = reactive({
@@ -127,6 +223,22 @@ watch(
     }
 )
 
+// 消息列表变化时自动加载图片消息（同时监听引用和长度，确保可靠触发）
+watch(
+    () => chat.currentMessages.length,
+    () => {
+      const messages = chat.currentMessages
+      if (messages?.length > 0) loadImageMessages(messages)
+    }
+)
+watch(
+    () => chat.currentMessages,
+    (messages) => {
+      if (messages?.length > 0) loadImageMessages(messages)
+    },
+    { immediate: true, deep: false }
+)
+
 function getContentText(content) {
   if (typeof content === 'string') return content
   return content?.text || ''
@@ -196,9 +308,70 @@ function formatTime(ts) {
   font-size: 13px;
   color: #909399;
 }
+
+.msg-img {
+  max-width: 200px;
+  max-height: 200px;
+  border-radius: 8px;
+  cursor: pointer;
+  object-fit: cover;
+  display: block;
+}
+
+.msg-img-sending {
+  opacity: 0.6;
+}
+
+.msg-img-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.msg-img-placeholder {
+  width: 120px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 8px;
+  font-size: 12px;
+  color: #909399;
+}
+
+.msg-status-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 8px;
+  color: #fff;
+  font-size: 12px;
+}
+
+.msg-status-failed {
+  background: rgba(245, 108, 108, 0.5);
+}
+
+.msg-status-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
 </style>
 
-<!-- Teleport 到 body 的菜单需要非 scoped 样式 -->
+<!-- Teleport 到 body 的菜单和预览需要非 scoped 样式 -->
 <style>
 .context-menu {
   position: fixed;
@@ -222,5 +395,24 @@ function formatTime(ts) {
 .context-menu-item:hover {
   background: #f5f7fa;
   color: #409eff;
+}
+
+/* 图片预览弹窗 */
+.image-preview-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.image-preview-img {
+  max-width: 80vw;
+  max-height: 80vh;
+  border-radius: 8px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
 }
 </style>

@@ -8,7 +8,7 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 
 const { ipcRenderer } = window.require('electron')
 
@@ -23,64 +23,88 @@ const props = defineProps({
   name: { type: String, default: '' }
 })
 
-// ===== 全局内存缓存（进程生命周期内不重复请求） =====
+// ===== 全局内存缓存（进程生命周期内共享，命中后不再发 IPC） =====
 if (!window.__avatarCache) window.__avatarCache = {}
-// 正在请求中的 ID 集合（防止重复发起）
+// 正在请求中的 key 集合（防止同 key 重复发 IPC）
 if (!window.__avatarPending) window.__avatarPending = new Set()
-// 等待某个头像结果的回调队列
-if (!window.__avatarWaiters) window.__avatarWaiters = {}
 
-const src = ref(window.__avatarCache[`${props.type}_${props.id}`] || '')
+const key = () => `${props.type}_${props.id}`
+const src = ref(window.__avatarCache[key()] || '')
 
 const initial = ref(
   props.name ? props.name.charAt(0).toUpperCase() : (props.type === 'group' ? '群' : '?')
 )
 
-// 全局监听（只注册一次）
-if (!window.__avatarListenerRegistered) {
-  window.__avatarListenerRegistered = true
-  ipcRenderer.on('home:getAvatarRes', (_event, data) => {
-    const key = `${data.type}_${data.id}`
-    window.__avatarPending.delete(key)
+// ===== 每个 Avatar 实例独立监听响应 =====
+let listening = false
 
-    if (data.success && data.data) {
-      window.__avatarCache[key] = data.data
-    }
+function onResponse(_event, data) {
+  const k = key()
+  const dataKey = `${data.type}_${data.id}`
 
-    // 通知所有等待中的回调
-    if (window.__avatarWaiters[key]) {
-      window.__avatarWaiters[key].forEach(cb => cb(data))
-      delete window.__avatarWaiters[key]
+  // 其他组件的响应到达，检查缓存是否已被写入（由首个到达的响应写入）
+  if (dataKey !== k) {
+    if (window.__avatarCache[k] && !src.value) {
+      src.value = window.__avatarCache[k]
+      stopListen()
     }
-  })
+    return
+  }
+
+  // 自己的响应到达
+  if (data.success && data.data) {
+    window.__avatarCache[k] = data.data
+    src.value = data.data
+  }
+  window.__avatarPending.delete(k)
+  stopListen()
+}
+
+function startListen() {
+  if (listening) return
+  listening = true
+  ipcRenderer.on('home:getAvatarRes', onResponse)
+}
+
+function stopListen() {
+  if (!listening) return
+  listening = false
+  ipcRenderer.removeListener('home:getAvatarRes', onResponse)
 }
 
 function requestAvatar() {
-  const key = `${props.type}_${props.id}`
+  const k = key()
 
-  // 内存缓存命中
-  if (window.__avatarCache[key]) {
-    src.value = window.__avatarCache[key]
+  // 1. 内存缓存命中 → 直接显示，不发任何请求
+  if (window.__avatarCache[k]) {
+    src.value = window.__avatarCache[k]
     return
   }
 
-  // 已有相同请求在进行中，排队等待
-  if (window.__avatarPending.has(key)) {
-    if (!window.__avatarWaiters[key]) window.__avatarWaiters[key] = []
-    window.__avatarWaiters[key].push((data) => {
-      if (data.success && data.data) src.value = data.data
-    })
+  // 2. 缓存未命中 → 注册监听器等待响应
+  startListen()
+
+  // 3. 二次检查：可能在注册监听器的瞬间，另一个组件的响应到达并写入了缓存
+  if (window.__avatarCache[k]) {
+    src.value = window.__avatarCache[k]
+    stopListen()
     return
   }
 
-  // 发起新请求
-  window.__avatarPending.add(key)
+  // 4. 如果已有同 key 请求在进行中，不发重复 IPC，只挂监听等缓存写入
+  if (window.__avatarPending.has(k)) return
+
+  // 5. 发起 IPC 请求
+  window.__avatarPending.add(k)
   ipcRenderer.send('home:getAvatar', { id: props.id, type: props.type })
 }
 
 onMounted(requestAvatar)
 
+onUnmounted(stopListen)
+
 watch(() => [props.id, props.type], () => {
+  stopListen()
   requestAvatar()
 })
 </script>

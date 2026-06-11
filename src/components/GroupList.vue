@@ -6,8 +6,11 @@
       :class="['group-item', { active: isActive(group) }]"
       @click="chat.selectChat(group.id, 'group')"
     >
-      <span class="group-name">{{ group.name }}</span>
-      <span class="member-count">{{ group.members || 0 }} 人</span>
+      <Avatar :id="group.id" type="group" :name="group.name" :size="36" />
+      <div class="group-info">
+        <span class="group-name">{{ group.name }}</span>
+        <span class="member-count">{{ group.members || 0 }} 人</span>
+      </div>
     </div>
     <div v-if="chat.groups.length === 0" class="empty-hint">暂无群组</div>
   </div>
@@ -15,6 +18,7 @@
 
 <script setup>
 import { useChatStore } from '@/stores/chat'
+import Avatar from './Avatar.vue'
 
 const chat = useChatStore()
 
@@ -34,7 +38,7 @@ function isActive(group) {
 .group-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 12px;
   padding: 10px 16px;
   cursor: pointer;
   transition: background 0.15s;
@@ -48,14 +52,26 @@ function isActive(group) {
   background: #d9ecff;
 }
 
+.group-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 .group-name {
   font-size: 14px;
   color: #303133;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .member-count {
   font-size: 12px;
   color: #909399;
+  flex-shrink: 0;
 }
 
 .empty-hint {
