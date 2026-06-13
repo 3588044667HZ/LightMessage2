@@ -495,16 +495,36 @@
 
             // 模拟登录过程
             console.log('登录信息:', {userid, password, server});
-            // window.IMClient.login(Number(userid), password)
-            // ;
-            ipcRenderer.send('login', Number(userid), password, document.getElementById('rememberMe').checked
-            )
+
+            // 先移除旧的监听器，防止重复注册导致事件堆积
+            ipcRenderer.removeAllListeners("login:error");
+            ipcRenderer.removeAllListeners("login:success");
+
+            // 登录超时保护：15秒无响应则恢复按钮状态
+            var loginTimeout = setTimeout(() => {
+                if (isSubmitting) {
+                    showMessage('登录超时，请检查服务器连接后重试', 'error');
+                    setLoading(false);
+                    isSubmitting = false;
+                }
+            }, 15000);
+
+            // 注册监听器（必须在 send 之前，防止极快响应时错过事件）
             ipcRenderer.on("login:error", (event, data) => {
-                showMessage(data.message, "error")
+                showMessage(data.message || '登录失败', "error")
+                setLoading(false);
+                isSubmitting = false;
+                clearTimeout(loginTimeout);
             })
             ipcRenderer.on("login:success", (event, data) => {
                 showMessage('登录成功', 'success');
+                setLoading(false);
+                isSubmitting = false;
+                clearTimeout(loginTimeout);
             })
+
+            // 发送登录请求
+            ipcRenderer.send('login', Number(userid), password, document.getElementById('rememberMe').checked, server)
 
             // 模拟网络请求延迟
             // await new Promise(resolve => setTimeout(resolve, 1500));

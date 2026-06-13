@@ -9,6 +9,8 @@ class Database {
     constructor() {
         this.db = null;
         this.collections = {};
+        this._initialized = false;
+        this._initPromise = null;
         this.dbPath = path.join(__dirname, "data", "im.db");
 
         // 确保目录存在
@@ -16,60 +18,70 @@ class Database {
         if (!fs.existsSync(dir)) {
             fs.mkdirSync(dir, {recursive: true});
         }
-
-        this.initialize().then(() => {
-        });
     }
 
     initialize() {
-        return new Promise((resolve) => {
+        if (this._initPromise) return this._initPromise;
+        this._initPromise = new Promise((resolve) => {
             this.db = new loki(this.dbPath, {
                 autoload: true, autoloadCallback: () => {
                     this.createCollections();
+                    this._initialized = true;
+                    console.log("[DB] 初始化完成");
                     resolve();
                 }, autosave: true, autosaveInterval: 4000, serializationMethod: "pretty"
             });
         });
+        return this._initPromise;
+    }
+
+    // 安全获取或创建集合（防止重复创建抛错）
+    getOrCreateCollection(name, options) {
+        let col = this.db.getCollection(name);
+        if (!col) {
+            col = this.db.addCollection(name, options);
+        }
+        return col;
     }
 
     createCollections() {
         // 用户配置
-        this.collections.settings = this.db.addCollection("settings", {
+        this.collections.settings = this.getOrCreateCollection("settings", {
             indices: ["key"], unique: ["key"]
         });
 
         // 用户信息
-        this.collections.users = this.db.addCollection("users", {
+        this.collections.users = this.getOrCreateCollection("users", {
             indices: ["id"], unique: ["id"], autoupdate: true
         });
 
         // 消息记录（单聊）
-        this.collections.messages = this.db.addCollection("messages", {
+        this.collections.messages = this.getOrCreateCollection("messages", {
             indices: ["id", "sender_id", "receiver_id", "timestamp", "conversation_id"], autoupdate: true
         });
 
         // 群组消息
-        this.collections.groupMessages = this.db.addCollection("group_messages", {
+        this.collections.groupMessages = this.getOrCreateCollection("group_messages", {
             indices: ["id", "group_id", "sender_id", "timestamp"], autoupdate: true
         });
 
         // 群组信息
-        this.collections.groups = this.db.addCollection("groups", {
+        this.collections.groups = this.getOrCreateCollection("groups", {
             indices: ["id"], unique: ["id"], autoupdate: true
         });
 
         // 联系人
-        this.collections.contacts = this.db.addCollection("contacts", {
+        this.collections.contacts = this.getOrCreateCollection("contacts", {
             indices: ["id"], unique: ["id"], autoupdate: true
         });
 
         // 会话列表
-        this.collections.conversations = this.db.addCollection("conversations", {
+        this.collections.conversations = this.getOrCreateCollection("conversations", {
             indices: ["id", "type", "last_message_time"], autoupdate: true
         });
 
         // 文件传输记录
-        this.collections.files = this.db.addCollection("files", {
+        this.collections.files = this.getOrCreateCollection("files", {
             indices: ["id", "message_id", "upload_time"], autoupdate: true
         });
 
@@ -133,16 +145,63 @@ class Database {
 
     // ========== Messages 操作 ==========
     saveMessage(message) {
-        // 生成会话ID（单聊）
-        message.conversation_id = this.getConversationId(message.sender_id, message.receiver_id || message.group_id);
-        message.timestamp = message.timestamp || Date.now();
+        try {
+            if (!this.collections.messages) {
+                console.error("[DB] messages collection not ready");
+                return null;
+            }
+            // 去重：如果 message_id 已存在则跳过
+            if (message.message_id) {
+                const existing = this.collections.messages.findOne({ message_id: message.message_id });
+                if (existing) return existing;
+            }
+            // 生成会话ID（单聊）
+            message.conversation_id = this.getConversationId(message.sender_id, message.receiver_id || message.group_id);
+            message.timestamp = message.timestamp || Date.now();
 
-        return this.collections.messages.insert(message);
+            const result = this.collections.messages.insert(message);
+            console.log("[DB] 保存私聊消息, conv:", message.conversation_id, "sender:", message.sender_id);
+            return result;
+        } catch (err) {
+            console.error("[DB] saveMessage error:", err);
+            return null;
+        }
     }
 
     saveGroupMessage(message) {
-        message.timestamp = message.timestamp || Date.now();
-        return this.collections.groupMessages.insert(message);
+        try {
+            if (!this.collections.groupMessages) {
+                console.error("[DB] groupMessages collection not ready");
+                return null;
+            }
+            // 去重：如果 message_id 已存在则跳过
+            if (message.message_id) {
+                const existing = this.collections.groupMessages.findOne({ message_id: message.message_id });
+                if (existing) return existing;
+            }
+            message.timestamp = message.timestamp || Date.now();
+            const result = this.collections.groupMessages.insert(message);
+            console.log("[DB] 保存群消息, group:", message.group_id, "sender:", message.sender_id);
+            return result;
+        } catch (err) {
+            console.error("[DB] saveGroupMessage error:", err);
+            return null;
+        }
+    }
+
+    // 强制刷盘（重要消息保存后调用，确保数据持久化）
+    forceSave() {
+        return new Promise((resolve, reject) => {
+            if (!this.db) { resolve(); return; }
+            this.db.saveDatabase((err) => {
+                if (err) {
+                    console.error("[DB] 强制刷盘失败:", err);
+                    reject(err);
+                } else {
+                    resolve();
+                }
+            });
+        });
     }
 
     getMessages(conversationId, limit = 50, offset = 0) {
@@ -341,6 +400,24 @@ class Database {
                 this.collections.conversations.remove(conv);
             }
         });
+    }
+
+    /**
+     * 登出时清理当前用户的所有数据
+     * 清除消息、群消息、联系人、会话列表，保留 settings 和 groups 元数据
+     */
+    clearUserData() {
+        try {
+            if (this.collections.messages) this.collections.messages.clear();
+            if (this.collections.groupMessages) this.collections.groupMessages.clear();
+            if (this.collections.contacts) this.collections.contacts.clear();
+            if (this.collections.conversations) this.collections.conversations.clear();
+            if (this.collections.users) this.collections.users.clear();
+            console.log("[DB] 用户数据已清理");
+            this.forceSave().catch(() => {});
+        } catch (err) {
+            console.error("[DB] 清理用户数据失败:", err);
+        }
     }
 }
 

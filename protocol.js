@@ -1,6 +1,6 @@
 // 简单的JavaScript客户端示例
 class IMClient {
-    constructor(serverUrl = "ws://182.92.128.249:8765") {
+    constructor(serverUrl = "ws://127.0.0.1:8765") {
         this.ws = null;
         this.serverUrl = serverUrl;
         this.connected = false;
@@ -8,6 +8,7 @@ class IMClient {
         this.userId = null;
         this.token = null;
         this.heartbeatInterval = null;
+        this.intentionalDisconnect = false;
         this.messageHandlers = {};
         this.onceHandlers = {}; // 添加一次性处理器
         this.onconnected = function () {
@@ -42,7 +43,7 @@ class IMClient {
 
     registerGroupMessageHandlers() {
         // 群聊消息接收
-        this.on("/group/receive_message", (data) => {
+        this.on("/group/message/receive", (data) => {
             console.log("收到群消息:", data);
             // 触发自定义事件，让组件可以监听
             this.dispatchEvent(new CustomEvent('groupMessage', {detail: data}));
@@ -147,7 +148,16 @@ class IMClient {
         }
 
         console.log(`正在连接服务器: ${this.serverUrl}`);
-        this.ws = new WebSocket(this.serverUrl);
+
+        // 重置主动断连标志
+        this.intentionalDisconnect = false;
+
+        try {
+            this.ws = new WebSocket(this.serverUrl);
+        } catch (error) {
+            console.error("WebSocket创建失败:", error);
+            return Promise.reject(error);
+        }
 
         // 重置状态
         this.connected = false;
@@ -183,11 +193,13 @@ class IMClient {
                 this.stopHeartbeat();
                 this.connectionCallbacks.onclose.forEach(callback => callback());
 
-                // 5秒后尝试重连
+                // 5秒后尝试重连（仅在非主动断连时）
                 setTimeout(() => {
-                    if (!this.connected && this.token) {
+                    if (!this.connected && this.token && !this.intentionalDisconnect) {
                         console.log("尝试重连...");
-                        this.connect();
+                        this.connect().catch(err => {
+                            console.error("自动重连失败:", err.message);
+                        });
                     }
                 }, 5000);
             };
@@ -196,7 +208,7 @@ class IMClient {
                 clearTimeout(timeout);
                 console.error("WebSocket错误:", error);
                 this.connectionCallbacks.onerror.forEach(callback => callback(error));
-                reject(error);
+                reject(new Error('WebSocket连接错误'));
             };
         });
 
@@ -205,39 +217,20 @@ class IMClient {
 
 // 等待连接就绪
     waitForConnection() {
-        if (this.connected && this.ws?.readyState === WebSocket.OPEN) {
+        if (this.connected && this.ws && this.ws.readyState === WebSocket.OPEN) {
             return Promise.resolve();
         }
-        return this.connectionPromise || this.connect();
+        // 当前连接不可用，尝试建立新连接
+        return this.connect();
     }
 
     registerMessageHandlers() {
-        // 群聊相关处理器
-        this.on("/group/create_response", (data) => {
-            if (data.code === 200) {
-            } else {
-            }
-        });
-
-        this.on("/group/receive_message", (data) => {
-        });
-
-        this.on("/group/notification", (data) => {
-        });
-
-        this.on("/history/get_response", (data) => {
-        });
-
-        this.on("/contacts/list_response", (data) => {
-        });
-        this.on("/presence/change", (data) => {
-        });
-
+        // 注意：/group/receive_message、/group/notification、/group/invitation_received
+        // 已在 registerGroupMessageHandlers() 中注册，不要在此处用空 handler 覆盖
 
         // 消息接收
         this.on("/message/receive", (data) => {
             console.log("收到消息:", data);
-            // 处理消息...
         });
 
         // 心跳响应
@@ -370,6 +363,7 @@ class IMClient {
 
     disconnect() {
         this.stopHeartbeat();
+        this.intentionalDisconnect = true;
         if (this.ws) {
             this.ws.close();
         }
