@@ -3,13 +3,22 @@
     <!-- 用户信息区 -->
     <div class="sidebar-header">
       <div class="user-info">
-        <Avatar
-          v-if="auth.userId"
-          :id="auth.userId"
-          type="user"
-          :name="auth.user?.username || ''"
-          :size="36"
-        />
+        <div class="avatar-wrapper" title="点击更换头像" @click="triggerAvatarUpload">
+          <Avatar
+            v-if="auth.userId"
+            :key="avatarKey"
+            :id="auth.userId"
+            type="user"
+            :name="auth.user?.username || ''"
+            :size="36"
+          />
+          <div class="avatar-overlay">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+              <circle cx="12" cy="13" r="4"/>
+            </svg>
+          </div>
+        </div>
         <span class="user-name">{{ auth.user?.username || '未登录' }}</span>
         <button class="logout-btn" @click="handleLogout" title="退出登录">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -51,7 +60,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
@@ -65,6 +74,30 @@ const { ipcRenderer } = window.require('electron')
 const router = useRouter()
 const auth = useAuthStore()
 const chat = useChatStore()
+const avatarKey = ref(0)  // 用于强制 Avatar 组件重新挂载
+
+// ===== 头像上传 =====
+function triggerAvatarUpload() {
+  ipcRenderer.send('home:uploadAvatar')
+}
+
+function onAvatarUploadRes(_event, data) {
+  console.log('[ChatSidebar] 头像上传响应:', data)
+  if (data.message === '已取消') return
+  if (data.success !== false) {
+    // 上传成功 → 清除旧缓存并强制 Avatar 重新挂载
+    const key = `user_${auth.userId}`
+    if (window.__avatarCache) delete window.__avatarCache[key]
+    avatarKey.value++
+  } else {
+    console.warn('[ChatSidebar] 头像上传失败:', data.message)
+  }
+}
+
+ipcRenderer.on('home:uploadAvatarRes', onAvatarUploadRes)
+onUnmounted(() => {
+  ipcRenderer.removeListener('home:uploadAvatarRes', onAvatarUploadRes)
+})
 
 const tabs = computed(() => [
   { key: 'conversations', label: '会话' },
@@ -110,6 +143,29 @@ function handleLogout() {
   align-items: center;
   gap: 10px;
   margin-bottom: 12px;
+}
+
+.avatar-wrapper {
+  position: relative;
+  cursor: pointer;
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+
+.avatar-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.avatar-wrapper:hover .avatar-overlay {
+  opacity: 1;
 }
 
 .user-name {

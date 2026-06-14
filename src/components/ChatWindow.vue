@@ -8,7 +8,10 @@
 
     <!-- 聊天区域 -->
     <template v-else>
-      <div class="chat-header">
+      <div
+        :class="['chat-header', { clickable: chat.currentChat.type === 'group' }]"
+        @click="onHeaderClick"
+      >
         <Avatar
           :id="chat.currentChat.id"
           :type="chat.currentChat.type === 'group' ? 'group' : 'user'"
@@ -16,9 +19,29 @@
           :size="32"
         />
         <span class="chat-title">{{ chatTitle }}</span>
+        <span v-if="chat.currentChat.type === 'group'" class="header-info-icon" title="群聊信息">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="16" x2="12" y2="12"/>
+            <line x1="12" y1="8" x2="12.01" y2="8"/>
+          </svg>
+        </span>
       </div>
 
-      <MessageList class="chat-messages" />
+      <div class="chat-body">
+        <MessageList
+          class="chat-messages"
+          :user-is-admin-or-owner="userIsAdminOrOwner"
+        />
+        <GroupInfoPanel
+          v-if="showGroupInfo && chat.currentChat?.type === 'group'"
+          :group-info="currentGroupInfo"
+          :members="groupMembers"
+          :loading="groupInfoLoading"
+          :user-is-admin-or-owner="userIsAdminOrOwner"
+          @close="closeGroupInfo"
+        />
+      </div>
 
       <div class="chat-input-area">
         <button class="img-btn" @click="selectImage" title="发送图片">
@@ -47,12 +70,90 @@ import { useAuthStore } from '@/stores/auth'
 import { useIpc } from '@/composables/useIpc'
 import MessageList from './MessageList.vue'
 import Avatar from './Avatar.vue'
+import GroupInfoPanel from './GroupInfoPanel.vue'
 
 const { ipcRenderer } = window.require('electron')
 const chat = useChatStore()
 const auth = useAuthStore()
 const ipc = useIpc()
 const inputText = ref('')
+
+// ===== 群信息面板 =====
+const showGroupInfo = ref(false)
+const groupMembers = ref([])
+const groupInfoLoading = ref(false)
+
+const currentGroupInfo = computed(() => {
+  if (!chat.currentChat || chat.currentChat.type !== 'group') return {}
+  return chat.groupsMap[chat.currentChat.id] || { id: chat.currentChat.id, name: `群组${chat.currentChat.id}` }
+})
+
+/** 当前用户是否为当前群的群主或管理员 */
+const userIsAdminOrOwner = computed(() => {
+  if (!chat.currentChat || chat.currentChat.type !== 'group') return false
+  const groupId = chat.currentChat.id
+  const userId = auth.userId
+
+  // 检查是否为群主（来自群组列表缓存）
+  const group = chat.groupsMap[groupId]
+  if (group?.ownerId && String(group.ownerId) === String(userId)) return true
+
+  // 检查群成员详情中是否有管理员角色
+  const memberInfo = groupMembers.value.find(m => String(m.id) === String(userId))
+  if (memberInfo && (memberInfo.role === 'admin' || memberInfo.role === 'moderator')) return true
+
+  return false
+})
+
+function onHeaderClick() {
+  if (chat.currentChat?.type !== 'group') return
+  showGroupInfo.value = !showGroupInfo.value
+  if (showGroupInfo.value) {
+    loadGroupInfo(chat.currentChat.id)
+  }
+}
+
+function closeGroupInfo() {
+  showGroupInfo.value = false
+}
+
+function loadGroupInfo(groupId) {
+  groupInfoLoading.value = true
+  groupMembers.value = []
+  ipcRenderer.send('home:getGroupInfo', { groupId })
+}
+
+// 群信息响应
+function onGetGroupInfoRes(_event, data) {
+  groupInfoLoading.value = false
+  console.log('[ChatWindow] 群信息:', data)
+
+  if (data.success === false) {
+    console.warn('[ChatWindow] 获取群信息失败:', data.message)
+    return
+  }
+
+  // 解析成员列表（兼容不同服务端字段名）
+  const rawMembers = data.members || data.member_list || []
+  const ownerId = data.owner_id || currentGroupInfo.value.ownerId
+
+  groupMembers.value = rawMembers.map(m => {
+    const id = m.user_id || m.id || m.uid
+    const nickname = m.nickname || m.name || m.username || `用户${id}`
+    const role = m.role || m.role_name || null
+    return { id, nickname, role }
+  })
+
+  // 如果没有 owner 角色标记，手动给群主标记
+  if (ownerId) {
+    const ownerMember = groupMembers.value.find(m => String(m.id) === String(ownerId))
+    if (ownerMember && !ownerMember.role) {
+      ownerMember.role = null // getMemberRole 在 panel 中通过 ownerId 判断
+    }
+  }
+}
+
+ipcRenderer.on('home:getGroupInfoRes', onGetGroupInfoRes)
 
 const chatTitle = computed(() => {
   if (!chat.currentChat) return ''
@@ -205,6 +306,10 @@ watch(
   () => chat.currentChat,
   (newChat) => {
     if (!newChat) return
+
+    // 切换会话时关闭群信息面板
+    showGroupInfo.value = false
+    groupMembers.value = []
 
     const key = `${newChat.type}_${newChat.id}`
 
@@ -418,6 +523,7 @@ ipcRenderer.on('home:uploadImageRes', onUploadImageRes)
 onUnmounted(() => {
   ipcRenderer.removeListener('home:selectImageRes', onSelectImageRes)
   ipcRenderer.removeListener('home:uploadImageRes', onUploadImageRes)
+  ipcRenderer.removeListener('home:getGroupInfoRes', onGetGroupInfoRes)
 })
 </script>
 
@@ -453,10 +559,38 @@ onUnmounted(() => {
   color: #303133;
 }
 
+.chat-header.clickable {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.chat-header.clickable:hover {
+  background: #f5f7fa;
+}
+
+.header-info-icon {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  color: #909399;
+  transition: color 0.15s;
+}
+
+.chat-header.clickable:hover .header-info-icon {
+  color: #409eff;
+}
+
+.chat-body {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
 .chat-messages {
   flex: 1;
   overflow-y: auto;
   padding: 16px 20px;
+  min-width: 0;
 }
 
 .chat-input-area {

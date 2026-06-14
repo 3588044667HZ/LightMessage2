@@ -11,12 +11,56 @@
     >
       <!-- 撤回消息 -->
       <div v-if="msg.recalled" class="recall-notice">
-        {{ String(msg.sender_id) === String(auth.userId) ? '你撤回了一条消息' : '对方撤回了一条消息' }}
+        {{ getRecallText(msg) }}
       </div>
 
       <!-- 普通消息 -->
       <template v-else>
-        <div class="message-bubble">
+        <!-- 群聊：带发送者头像和昵称 -->
+        <div v-if="isGroupChat" class="message-wrapper" :class="String(msg.sender_id) === String(auth.userId) ? 'sent-group' : 'received-group'">
+          <div v-if="shouldShowSenderInfo(msg, idx)" class="sender-area" :class="String(msg.sender_id) === String(auth.userId) ? 'sender-right' : 'sender-left'">
+            <Avatar
+              :id="msg.sender_id"
+              type="user"
+              :size="36"
+              :name="getSenderNickname(msg.sender_id)"
+            />
+          </div>
+          <div v-else class="sender-spacer"></div>
+          <div class="message-content">
+            <div v-if="shouldShowSenderInfo(msg, idx)" class="sender-nickname">
+              {{ getSenderNickname(msg.sender_id) }}
+            </div>
+            <div class="message-bubble">
+              <div v-if="msg.type === 'image'" class="message-image">
+                <div class="msg-img-wrapper">
+                  <img
+                    v-if="hasImageSrc(msg)"
+                    :src="getImageSrc(msg)"
+                    class="msg-img"
+                    :class="{ 'msg-img-sending': msg.sendStatus === 'sending' }"
+                    @click="msg.sendStatus !== 'sending' && previewImage(getImageSrc(msg))"
+                  />
+                  <div v-else class="msg-img-placeholder">
+                    <span>图片加载中...</span>
+                  </div>
+                  <div v-if="msg.sendStatus === 'sending'" class="msg-status-overlay">
+                    <div class="msg-status-spinner"></div>
+                    <span>发送中</span>
+                  </div>
+                  <div v-if="msg.sendStatus === 'failed'" class="msg-status-overlay msg-status-failed">
+                    <span>发送失败</span>
+                  </div>
+                </div>
+              </div>
+              <div v-else class="message-text">{{ getContentText(msg.content) }}</div>
+              <div class="message-time">{{ formatTime(msg.timestamp) }}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 私聊：保持原有布局 -->
+        <div v-else class="message-bubble">
           <div v-if="msg.type === 'image'" class="message-image">
             <div class="msg-img-wrapper">
               <img
@@ -67,14 +111,57 @@
 </template>
 
 <script setup>
-import {ref, watch, nextTick, reactive, onMounted, onUnmounted} from 'vue'
+import {ref, computed, watch, nextTick, reactive, onMounted, onUnmounted} from 'vue'
 import {useChatStore} from '@/stores/chat'
 import {useAuthStore} from '@/stores/auth'
+import Avatar from './Avatar.vue'
 
 const {ipcRenderer} = window.require('electron')
 const chat = useChatStore()
 const auth = useAuthStore()
 const listRef = ref(null)
+
+const props = defineProps({
+  /** 当前用户是否为群主或管理员（用于撤回他人消息） */
+  userIsAdminOrOwner: { type: Boolean, default: false }
+})
+
+// ---- 群聊发送者信息 ----
+const isGroupChat = computed(() => chat.currentChat?.type === 'group')
+
+/**
+ * 判断是否显示发送者头像和昵称
+ * 规则：当前消息的前一条不是同一发送者、或间隔超过 3 分钟时显示
+ */
+function shouldShowSenderInfo(msg, idx) {
+  if (!isGroupChat.value) return false
+  if (idx === 0) return true
+  const prev = chat.currentMessages[idx - 1]
+  if (String(prev.sender_id) !== String(msg.sender_id)) return true
+  if (prev.recalled) return true
+  if (!prev.timestamp || !msg.timestamp) return true
+  return (msg.timestamp - prev.timestamp) > 3 * 60 * 1000
+}
+
+/** 获取发送者昵称，优先从好友列表读取，当前用户从 auth 读取 */
+function getSenderNickname(senderId) {
+  // 当前登录用户：从 auth store 获取
+  if (String(senderId) === String(auth.userId)) {
+    const u = auth.user
+    if (u) return u.nickname || u.username || `用户${senderId}`
+  }
+  // 其他用户：从好友列表查找
+  const friend = chat.friendsMap[senderId]
+  if (friend) return friend.nickname || friend.name || `用户${senderId}`
+  return `用户${senderId}`
+}
+
+/** 撤回消息提示文本 */
+function getRecallText(msg) {
+  if (String(msg.sender_id) === String(auth.userId)) return '你撤回了一条消息'
+  if (isGroupChat.value) return `${getSenderNickname(msg.sender_id)} 撤回了一条消息`
+  return '对方撤回了一条消息'
+}
 
 // ---- 图片消息渲染 ----
 // 全局图片缓存：组件销毁后数据不丢失，重新挂载时可直接读取
@@ -154,9 +241,15 @@ const contextMenu = reactive({
 })
 
 function onContextMenu(event, msg) {
-  // 只能撤回自己发送的、且有 message_id 的消息
-  if (String(msg.sender_id) !== String(auth.userId)) return
-  if (!msg.message_id || msg.recalled) return
+  if (msg.recalled || !msg.message_id) return
+
+  const isSelf = String(msg.sender_id) === String(auth.userId)
+
+  // 自己的消息始终可以右键
+  // 他人的消息仅在群聊且当前用户是群主/管理员时可右键
+  if (!isSelf) {
+    if (!isGroupChat.value || !props.userIsAdminOrOwner) return
+  }
 
   contextMenu.x = event.clientX
   contextMenu.y = event.clientY
@@ -190,7 +283,11 @@ function recallMessage() {
     hideContextMenu()
     return
   }
-  if (!isWithinRecallWindow(msg)) {
+
+  const isSelf = String(msg.sender_id) === String(auth.userId)
+
+  // 自己的消息受 2 分钟限制；管理员/群主撤回他人消息不受限制
+  if (isSelf && !isWithinRecallWindow(msg)) {
     hideContextMenu()
     console.warn('[MessageList] 超过2分钟，无法撤回')
     return
@@ -268,6 +365,57 @@ function formatTime(ts) {
 
 .message-item.received {
   justify-content: flex-start;
+}
+
+/* ---- 群聊消息布局 ---- */
+.message-wrapper {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+
+.message-wrapper.sent-group {
+  flex-direction: row-reverse;
+}
+
+.message-wrapper.received-group {
+  flex-direction: row;
+}
+
+.sender-area {
+  flex-shrink: 0;
+  align-self: flex-start;
+}
+
+.sender-spacer {
+  width: 36px;
+  flex-shrink: 0;
+}
+
+.message-content {
+  max-width: calc(100% - 52px);
+  display: flex;
+  flex-direction: column;
+}
+
+.sent-group .message-content {
+  align-items: flex-end;
+}
+
+.received-group .message-content {
+  align-items: flex-start;
+}
+
+.sender-nickname {
+  font-size: 12px;
+  color: #909399;
+  margin-bottom: 2px;
+  padding: 0 4px;
+}
+
+/* 群聊模式：wrapper 占满宽度，内部 flex 控制对齐 */
+.message-wrapper .message-bubble {
+  max-width: 100%;
 }
 
 .message-bubble {

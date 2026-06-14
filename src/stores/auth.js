@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 
 export const useAuthStore = defineStore('auth', () => {
   // --- state ---
-  const user = ref(null)        // { id, username, avatar, status }
+  const user = ref(null)        // { id, username, nickname, avatar, status }
   const token = ref('')
   const serverUrl = ref('ws://localhost:8765')
 

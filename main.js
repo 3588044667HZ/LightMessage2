@@ -11,7 +11,7 @@ const isDevMode = process.env.NODE_ENV === 'development' || process.argv.include
 Client.connect().catch(err => {
     console.error("初始连接失败，将在登录时重试:", err.message);
 })
-let DataBase = require('./database');
+let DataBase = require('./database.js');
 let db = new DataBase.Database();
 // 初始化仅调用一次，等待完成后再创建集合
 db.initialize().then(() => {
@@ -78,6 +78,7 @@ const createWindow = () => {
             mainWindow.webContents.send("login:success", {
                 user_id: data.user_id,
                 username: data.username,
+                nickname: data.nickname || data.username,
                 token: data.token,
                 user_info: data.user_info || { avatar: '', status: 'online' }
             })

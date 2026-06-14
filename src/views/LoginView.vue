@@ -90,6 +90,7 @@ ipcOn('login:success', (_event, data) => {
   auth.setUser({
     id: data.user_id,
     username: data.username,
+    nickname: data.nickname || data.username,
     avatar: data.user_info?.avatar,
     status: data.user_info?.status
   })
