@@ -1,0 +1,39 @@
+# LightMessage Electron Builder 配置
+appId: com.lightmessage.app
+productName: LightMessage
+copyright: Copyright © 2026
+
+# 输出目录
+directories:
+  output: release
+
+# 只打包需要的文件，排除开发文件
+files:
+  - main.js
+  - protocol.js
+  - database.js
+  - preload.js
+  - dist/**/*
+  - node_modules/**/*
+  - package.json
+  # 排除开发文件
+  - "!src/**/*"
+  - "!data/**/*"
+  - "!home/**/*"
+  - "!*.html"
+  - "!vite.config.*"
+  - "!tsconfig.*"
+  - "!*.md"
+  - "!database-test.js"
+  - "!refactor-analysis.md"
+
+# Windows 配置
+win:
+  target:
+    - target: dir
+      arch:
+        - x64
+  icon: null  # 可替换为实际图标路径，如 build/icon.ico
+
+# 不压缩为 asar，启动更快
+asar: false
